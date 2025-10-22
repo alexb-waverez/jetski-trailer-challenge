@@ -1,0 +1,5 @@
+{
+  "name": "Jet Ski Trailer Competition Timer",
+  "description": "A web app to time competitors in a jet ski trailer maneuvering competition. It allows for entering competitors, timing their runs, and viewing the final results.",
+  "requestFramePermissions": []
+}
