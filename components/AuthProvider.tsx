@@ -48,14 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDbRolesConfigured(true);
       const fetchedRole = doc.role as UserRole;
       setDbRole(fetchedRole);
-
-      // Lock standard 'user' roles from simulating admin
-      if (fetchedRole === 'admin') {
-        const simulated = localStorage.getItem('simulated_role') as UserRole || 'admin';
-        setRole(simulated);
-      } else {
-        setRole('user');
-      }
+      setRole(fetchedRole);
     } catch (err: any) {
       const config = getFullDbConfig();
       // Check if collection itself is missing vs. document missing
@@ -105,12 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               );
               const existingRole = existingDoc.role as UserRole;
               setDbRole(existingRole);
-              if (existingRole === 'admin') {
-                const simulated = localStorage.getItem('simulated_role') as UserRole || 'admin';
-                setRole(simulated);
-              } else {
-                setRole('user');
-              }
+              setRole(existingRole);
               return;
             } catch (readErr) {
               console.error("Failed to read existing user role record after conflict:", readErr);
