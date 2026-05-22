@@ -5,7 +5,7 @@ import { useAuth } from './AuthProvider';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, logout, role, dbRole, dbRolesConfigured, toggleSimulatedRole } = useAuth();
+  const { user, logout, role, dbRole, dbRolesConfigured, toggleSimulatedRole, isConfigured } = useAuth();
 
   const activeLinkStyle = {
     color: '#38bdf8', // light blue for active link
@@ -84,7 +84,7 @@ const Header: React.FC = () => {
             <div className="flex items-center space-x-3 border-l border-gray-750 pl-6 animate-fade-in text-right">
               <div>
                 <div className="flex items-center gap-1.5 justify-end mb-0.5">
-                  {(!dbRolesConfigured || dbRole === 'admin') ? (
+                  {!isConfigured ? (
                     <button
                       onClick={toggleSimulatedRole}
                       className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded cursor-pointer transition select-none tracking-wider ${
@@ -92,13 +92,17 @@ const Header: React.FC = () => {
                           ? 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25'
                           : 'bg-sky-500/15 text-sky-400 border border-sky-500/25 hover:bg-sky-500/25'
                       }`}
-                      title={dbRolesConfigured ? "Roles configured in Appwrite. Click to simulated-toggle." : "Roles collection unconfigured. Simulated fallback active. Click to swap."}
+                      title="Offline simulated fallback. Click to swap."
                     >
-                      {role} {dbRolesConfigured ? '👑' : '⚡ Mock'}
+                      {role} ⚡ Mock
                     </button>
                   ) : (
                     <span
-                      className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded tracking-wider bg-sky-500/10 text-sky-400 border border-sky-500/15"
+                      className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded tracking-wider ${
+                        role === 'admin'
+                          ? 'bg-red-500/10 text-red-400 border border-red-500/15'
+                          : 'bg-sky-500/10 text-sky-400 border border-sky-500/15'
+                      }`}
                     >
                       {role}
                     </span>
@@ -158,7 +162,7 @@ const Header: React.FC = () => {
             {user && (
               <li className="w-full pt-4 border-t border-gray-750/60 flex flex-col items-center gap-2 px-6">
                 <span className="text-[10px] text-gray-400 font-mono tracking-widest uppercase">My Role Status</span>
-                {(!dbRolesConfigured || dbRole === 'admin') ? (
+                {!isConfigured ? (
                   <button
                     onClick={toggleSimulatedRole}
                     className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded tracking-widest transition-all cursor-pointer ${
@@ -168,11 +172,15 @@ const Header: React.FC = () => {
                     }`}
                     title="Click to toggle role"
                   >
-                    {role} {dbRolesConfigured ? '👑 CLOUD' : '⚡ SIMULATED'}
+                    {role} ⚡ SIMULATED
                   </button>
                 ) : (
                   <span
-                    className="text-[10px] uppercase font-bold px-2.5 py-1 rounded tracking-widest bg-sky-500/10 text-sky-400 border border-sky-500/15"
+                    className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded tracking-widest ${
+                      role === 'admin'
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/15'
+                        : 'bg-sky-500/10 text-sky-400 border border-sky-500/15'
+                    }`}
                   >
                     {role}
                   </span>

@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
 
       if (isCollectionMissing) {
-        const defaultRole: UserRole = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+        const defaultRole: UserRole = 'user';
         setDbRolesConfigured(true); // Lock role configuration to prevent simulated role override
         setRole(defaultRole);
         setDbRole(defaultRole);
@@ -69,8 +69,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (isNotFound) {
         setDbRolesConfigured(true);
-        // Default newly registered to 'user' unless they are 'alexb@waverez.com'
-        const defaultRole: UserRole = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+        // Default newly registered to 'user'
+        const defaultRole: UserRole = 'user';
 
         try {
           await databases.createDocument(
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           console.error("Auto-creation of user role record failed:", createErr);
           setDbRolesConfigured(true);
-          const defaultFallback = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+          const defaultFallback = 'user';
           setRole(defaultFallback);
           setDbRole(defaultFallback);
 
@@ -123,7 +123,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         console.warn("Could not query User role from collection. Fallback safely to default permission:", err.message);
         setDbRolesConfigured(true);
-        const defaultRole: UserRole = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+        const defaultRole: UserRole = 'user';
         setRole(defaultRole);
         setDbRole(defaultRole);
       }
@@ -210,12 +210,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const toggleSimulatedRole = () => {
-    // Only permit toggling roles if we are running fully unconfigured local mock state OR if the database fetched role is explicitly 'admin'
+    // Only permit toggling roles if we are running fully unconfigured local mock state.
+    // When Appwrite is configured, role is strictly assigned based on database record, no toggling allowed.
     if (isConfigured) {
-      const isTrueAdmin = dbRole === 'admin' || (user && user.email && user.email.toLowerCase().trim() === 'alexb@waverez.com');
-      if (!isTrueAdmin) {
-        return;
-      }
+      return;
     }
     const nextRole = role === 'admin' ? 'user' : 'admin';
     setRole(nextRole);
