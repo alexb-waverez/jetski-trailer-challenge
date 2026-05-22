@@ -32,5 +32,6 @@ export interface Bid {
   competitorName: string;
   bidAmount: number;
   eventId: string;
+  approvedByAdmin?: boolean;
 }
 

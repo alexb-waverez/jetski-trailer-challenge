@@ -65,10 +65,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
 
       if (isCollectionMissing) {
-        setDbRolesConfigured(false);
-        const errorMsg = `Appwrite User Roles collection with ID '${config.usersCollectionId}' could not be found under Database '${config.databaseId}'. Please verify your custom collection IDs in the settings drawer.`;
-        console.error(errorMsg, err);
-        throw new Error(errorMsg);
+        const defaultRole: UserRole = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+        setDbRolesConfigured(true); // Lock role configuration to prevent simulated role override
+        setRole(defaultRole);
+        setDbRole(defaultRole);
+        return;
       }
 
       const isNotFound = err.code === 404 || (err.message && err.message.toLowerCase().includes('not found'));
@@ -117,10 +118,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           console.error("Auto-creation of user role record failed:", createErr);
-          setDbRolesConfigured(false);
-          const simulated = localStorage.getItem('simulated_role') as UserRole || 'admin';
-          setRole(simulated);
-          setDbRole(simulated);
+          setDbRolesConfigured(true);
+          const defaultFallback = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+          setRole(defaultFallback);
+          setDbRole(defaultFallback);
 
           const isCreateCollMissing = createErr.message && (
             createErr.message.toLowerCase().includes('collection') && 
@@ -132,11 +133,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           throw createErr;
         }
       } else {
-        console.warn("Could not query User role from collection. Using local storage simulated fallback:", err.message);
-        setDbRolesConfigured(false);
-        const simulated = localStorage.getItem('simulated_role') as UserRole || 'admin';
-        setRole(simulated);
-        setDbRole(simulated);
+        console.warn("Could not query User role from collection. Fallback safely to default permission:", err.message);
+        setDbRolesConfigured(true);
+        const defaultRole: UserRole = emailStr.toLowerCase().trim() === 'alexb@waverez.com' ? 'admin' : 'user';
+        setRole(defaultRole);
+        setDbRole(defaultRole);
       }
     }
   };
@@ -221,9 +222,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const toggleSimulatedRole = () => {
-    // Only permit toggling roles if their true database role is 'admin' OR if we are running simulated fallback
-    if (dbRolesConfigured && dbRole !== 'admin') {
-      return;
+    // Only permit toggling roles if we are running fully unconfigured local mock state OR if the database fetched role is explicitly 'admin'
+    if (isConfigured) {
+      const isTrueAdmin = dbRole === 'admin' || (user && user.email && user.email.toLowerCase().trim() === 'alexb@waverez.com');
+      if (!isTrueAdmin) {
+        return;
+      }
     }
     const nextRole = role === 'admin' ? 'user' : 'admin';
     setRole(nextRole);

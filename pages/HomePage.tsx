@@ -66,6 +66,7 @@ const HomePage: React.FC<HomePageProps> = ({
   const [selectedCompForBid, setSelectedCompForBid] = useState('');
   const [bidValueInput, setBidValueInput] = useState('');
   const [bidsError, setBidsError] = useState<string | null>(null);
+  const [pledgesTab, setPledgesTab] = useState<'all' | 'pending'>('all');
 
   const config = getFullDbConfig();
 
@@ -210,6 +211,11 @@ const HomePage: React.FC<HomePageProps> = ({
       alert("Only admins can register competitors.");
       return;
     }
+    const eventAlreadyTookPlace = competitors.some(c => c.status !== CompetitorStatus.Pending);
+    if (eventAlreadyTookPlace) {
+      alert("This event has already taken place or started. It is not possible to add competitors to started/past events.");
+      return;
+    }
     if (fullName.trim() && companyName.trim()) {
       addCompetitor(fullName, companyName);
       setFullName('');
@@ -245,7 +251,8 @@ const HomePage: React.FC<HomePageProps> = ({
       competitorId: matchedComp.id,
       competitorName: matchedComp.fullName,
       bidAmount: amount,
-      eventId: currentEventId
+      eventId: currentEventId,
+      approvedByAdmin: false
     };
 
     if (currentEventId === 'local' || !isAppwriteConfigured()) {
@@ -281,6 +288,62 @@ const HomePage: React.FC<HomePageProps> = ({
       setSelectedCompForBid('');
     } finally {
       setSubmittingBid(false);
+    }
+  };
+
+  const handleToggleApproveBid = async (bidId: string, currentApproved: boolean) => {
+    if (role !== 'admin') {
+      alert("Only course marshals can approve sponsor pledges.");
+      return;
+    }
+
+    const nextApproved = !currentApproved;
+
+    // Update state first
+    const updatedList = bids.map(b => (b.id === bidId || b.$id === bidId) ? { ...b, approvedByAdmin: nextApproved } : b);
+    setBids(updatedList);
+    localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedList));
+
+    if (currentEventId !== 'local' && isAppwriteConfigured()) {
+      try {
+        const activeConfig = getFullDbConfig();
+        const actualBidId = bids.find(b => b.id === bidId || b.$id === bidId)?.$id || bidId;
+        await databases.updateDocument(
+          activeConfig.databaseId,
+          activeConfig.bidsCollectionId,
+          actualBidId,
+          { approvedByAdmin: nextApproved }
+        );
+      } catch (err: any) {
+        console.error("Failed to update bid approval state in Appwrite:", err);
+        alert("Database error: " + (err.message || err));
+        fetchBids();
+      }
+    }
+  };
+
+  const handleDeleteBid = async (bidId: string) => {
+    if (role !== 'admin') return;
+    if (!window.confirm("Are you sure you want to remove this support pledge?")) return;
+
+    const updatedList = bids.filter(b => b.id !== bidId && b.$id !== bidId);
+    setBids(updatedList);
+    localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedList));
+
+    if (currentEventId !== 'local' && isAppwriteConfigured()) {
+      try {
+        const activeConfig = getFullDbConfig();
+        const actualBidId = bids.find(b => b.id === bidId || b.$id === bidId)?.$id || bidId;
+        await databases.deleteDocument(
+          activeConfig.databaseId,
+          activeConfig.bidsCollectionId,
+          actualBidId
+        );
+      } catch (err: any) {
+        console.error("Failed to delete bid in Appwrite:", err);
+        alert("Database error: " + (err.message || err));
+        fetchBids();
+      }
     }
   };
 
@@ -321,14 +384,22 @@ const HomePage: React.FC<HomePageProps> = ({
   if (currentEventId) {
     // Calculate bids summaries
     const totalPledged = bids.reduce((sum, b) => sum + b.bidAmount, 0);
+    const totalApprovedPledged = bids.filter(b => b.approvedByAdmin === true).reduce((sum, b) => sum + b.bidAmount, 0);
+    const totalPendingPledged = bids.filter(b => b.approvedByAdmin !== true).reduce((sum, b) => sum + b.bidAmount, 0);
     
     const getBidsForCompetitor = (compId: string) => {
       return bids.filter(b => b.competitorId === compId);
     };
 
     const getBidSumForCompetitor = (compId: string) => {
-      return getBidsForCompetitor(compId).reduce((sum, b) => sum + b.bidAmount, 0);
+      return getBidsForCompetitor(compId).filter(b => b.approvedByAdmin === true).reduce((sum, b) => sum + b.bidAmount, 0);
     };
+
+    const getPendingBidSumForCompetitor = (compId: string) => {
+      return getBidsForCompetitor(compId).filter(b => b.approvedByAdmin !== true).reduce((sum, b) => sum + b.bidAmount, 0);
+    };
+
+    const eventAlreadyTookPlace = competitors.some(c => c.status !== CompetitorStatus.Pending);
 
     return (
       <div className="space-y-8 animate-fade-in" id="registered-competitor-board">
@@ -379,53 +450,67 @@ const HomePage: React.FC<HomePageProps> = ({
                 </span>
               </div>
 
-              {competitors.length >= 20 ? (
-                <div className="p-4 bg-amber-950/40 border border-amber-500/35 text-amber-250 rounded-lg text-xs leading-normal">
-                  <strong>Slots filled:</strong> The events database column map allows up to 20 structured competitor lines. Clear active runs or create a new registry file.
+              {eventAlreadyTookPlace ? (
+                <div className="bg-amber-950/20 border border-amber-500/20 p-5 rounded-lg space-y-3 font-sans">
+                  <div className="flex items-center gap-2 text-amber-500 font-bold text-sm">
+                    <Lock className="h-4 w-4" />
+                    <span>Roster Registration Locked</span>
+                  </div>
+                  <p className="text-xs text-gray-300 leading-relaxed font-sans">
+                    This adventure event has already started or taken place. Competitors have active runs recorded, so adding new registrants at this stage is disabled to ensure competition records integrity.
+                  </p>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  {competitors.length >= 20 ? (
+                    <div className="p-4 bg-amber-950/40 border border-amber-500/35 text-amber-250 rounded-lg text-xs leading-normal">
+                      <strong>Slots filled:</strong> The events database column map allows up to 20 structured competitor lines. Clear active runs or create a new registry file.
+                    </div>
+                  ) : null}
 
-              <form onSubmit={handleSubmitCompetitor} className="space-y-5">
-                <div>
-                  <label htmlFor="fullName" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
-                    Competitor's Full Name
-                  </label>
-                  <input
-                    type="text"
-                    id="fullName"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. John Doe"
-                    disabled={competitors.length >= 20}
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-sky-505 focus:border-transparent transition text-white placeholder-gray-500 text-sm"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="companyName" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
-                    Affiliated Company / Marina
-                  </label>
-                  <input
-                    type="text"
-                    id="companyName"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="e.g. Waverez Jetski Marina"
-                    disabled={competitors.length >= 20}
-                    className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-sky-505 focus:border-transparent transition text-white placeholder-gray-500 text-sm"
-                    required
-                  />
-                </div>
+                  <form onSubmit={handleSubmitCompetitor} className="space-y-5">
+                    <div>
+                      <label htmlFor="fullName" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                        Competitor's Full Name
+                      </label>
+                      <input
+                        type="text"
+                        id="fullName"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="e.g. John Doe"
+                        disabled={competitors.length >= 20}
+                        className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-sky-505 focus:border-transparent transition text-white placeholder-gray-500 text-sm"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="companyName" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                        Affiliated Company / Marina
+                      </label>
+                      <input
+                        type="text"
+                        id="companyName"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="e.g. Waverez Jetski Marina"
+                        disabled={competitors.length >= 20}
+                        className="w-full px-4 py-2.5 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-sky-505 focus:border-transparent transition text-white placeholder-gray-500 text-sm"
+                        required
+                      />
+                    </div>
 
-                <button
-                  type="submit"
-                  disabled={competitors.length >= 20}
-                  className="w-full py-3 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md text-sm"
-                >
-                  Add Competitor Position
-                </button>
-              </form>
+                    <button
+                      type="submit"
+                      disabled={competitors.length >= 20}
+                      className="w-full py-3 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg transition duration-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-md text-sm"
+                    >
+                      Add Competitor Position
+                    </button>
+                  </form>
+                </>
+              )}
 
               <div className="p-4 bg-gray-850/40 border border-gray-750 rounded-lg text-xs text-center text-gray-400 font-sans leading-relaxed">
                 🛡️ You are currently operating under the <strong>admin</strong> role. Clicking this role allows edit operations on competitor registry definitions and timing.
@@ -600,9 +685,21 @@ const HomePage: React.FC<HomePageProps> = ({
                   Real-time live support pooling statistics derived from active database registers.
                 </p>
               </div>
-              <div className="bg-emerald-950/45 border border-emerald-500/20 px-4 py-2.5 rounded-lg text-right font-mono">
-                <span className="text-[10px] text-gray-400 block font-bold tracking-widest uppercase">Total Support Pledged</span>
-                <span className="text-emerald-400 text-xl font-bold font-mono">${totalPledged}</span>
+              <div className="flex flex-wrap gap-2 md:gap-3 items-center">
+                <div className="bg-emerald-950/60 border border-emerald-500/25 px-4 py-2 rounded-lg text-right font-mono">
+                  <span className="text-[9px] text-emerald-400 block font-bold tracking-widest uppercase">Approved Pool</span>
+                  <span className="text-emerald-300 text-lg font-bold">${totalApprovedPledged}</span>
+                </div>
+                {totalPendingPledged > 0 && (
+                  <div className="bg-amber-955/40 border border-amber-500/20 px-4 py-2 rounded-lg text-right font-mono">
+                    <span className="text-[9px] text-amber-500 block font-bold tracking-widest uppercase">Pending Approval</span>
+                    <span className="text-amber-300 text-lg font-bold">${totalPendingPledged}</span>
+                  </div>
+                )}
+                <div className="bg-gray-850/80 border border-gray-750/50 px-4 py-2 rounded-lg text-right font-mono">
+                  <span className="text-[9px] text-gray-400 block font-bold tracking-widest uppercase">Total Pledged</span>
+                  <span className="text-gray-300 text-lg lg:text-xl font-bold">${totalPledged}</span>
+                </div>
               </div>
             </div>
 
@@ -615,16 +712,27 @@ const HomePage: React.FC<HomePageProps> = ({
                 </h4>
                 <div className="divide-y divide-gray-750/60 max-h-[220px] overflow-y-auto pr-1">
                   {competitors
-                    .map(c => ({ ...c, bidSum: getBidSumForCompetitor(c.id) }))
+                    .map(c => ({ 
+                      ...c, 
+                      bidSum: getBidSumForCompetitor(c.id),
+                      pendingSum: getPendingBidSumForCompetitor(c.id)
+                    }))
                     .sort((a, b) => b.bidSum - a.bidSum)
                     .map((pilot, idx) => (
                       <div key={pilot.id} className="py-2.5 flex justify-between items-center text-xs">
                         <span className="truncate max-w-[180px] font-semibold text-gray-200">
                           {idx + 1}. {pilot.fullName}
                         </span>
-                        <span className={`font-mono font-bold ${pilot.bidSum > 0 ? 'text-emerald-400' : 'text-gray-500'}`}>
-                          ${pilot.bidSum} Supported
-                        </span>
+                        <div className="text-right font-mono text-xs flex flex-col">
+                          <span className={pilot.bidSum > 0 ? 'text-emerald-400 font-bold' : 'text-gray-500'}>
+                            ${pilot.bidSum} Supported
+                          </span>
+                          {pilot.pendingSum > 0 && (
+                            <span className="text-[10px] text-amber-500 font-medium">
+                              +${pilot.pendingSum} pending approval
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -632,25 +740,106 @@ const HomePage: React.FC<HomePageProps> = ({
 
               {/* Placed Bids Ledger history */}
               <div className="space-y-3 bg-gray-800/40 p-4 rounded-xl border border-gray-750/50">
-                <h4 className="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest flex items-center gap-1.5">
-                  <History className="h-4 w-4 text-sky-400" /> Recent Pledges
-                </h4>
-                <div className="divide-y divide-gray-750/60 max-h-[220px] overflow-y-auto pr-1">
-                  {bids.length === 0 ? (
+                <div className="flex items-center justify-between gap-2 border-b border-gray-750/60 pb-2 mb-1">
+                  <h4 className="text-xs font-bold font-mono text-gray-300 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                    <History className="h-4 w-4 text-sky-400 font-mono" /> Pledges ledger
+                  </h4>
+                  <div className="flex bg-gray-950 rounded border border-gray-750 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setPledgesTab('all')}
+                      className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded transition-colors ${
+                        pledgesTab === 'all' 
+                          ? 'bg-sky-600 text-white shadow-sm' 
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      All ({bids.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPledgesTab('pending')}
+                      className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded transition-colors ${
+                        pledgesTab === 'pending' 
+                          ? 'bg-amber-600/90 text-white shadow-sm' 
+                          : 'text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Pending ({bids.filter(b => b.approvedByAdmin !== true).length})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-750/60 max-h-[300px] overflow-y-auto pr-1">
+                  {([...bids].reverse().filter(bid => {
+                    if (pledgesTab === 'all') return true;
+                    return bid.approvedByAdmin !== true;
+                  })).length === 0 ? (
                     <div className="py-8 text-center text-xs text-gray-500 font-mono">
-                      No support pledges placed yet.
+                      No matching support pledges.
                     </div>
                   ) : (
-                    [...bids].reverse().slice(0, 5).map((bid) => (
-                      <div key={bid.id} className="py-2.5 text-xs flex justify-between items-center gap-3">
-                        <div className="truncate text-gray-300">
-                          <strong className="text-sky-400 font-medium">{bid.userName}</strong> backed <span className="font-semibold text-white">{bid.competitorName}</span>
+                    ([...bids].reverse().filter(bid => {
+                      if (pledgesTab === 'all') return true;
+                      return bid.approvedByAdmin !== true;
+                    })).map((bid) => {
+                      const isApproved = bid.approvedByAdmin === true;
+                      return (
+                        <div key={bid.id || bid.$id} className="py-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="truncate text-gray-300 space-y-1">
+                            <div>
+                              <strong className="text-sky-400 font-semibold">{bid.userName}</strong> backed <span className="font-semibold text-white">{bid.competitorName}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-bold text-emerald-400 text-xs">
+                                +${bid.bidAmount}
+                              </span>
+                              {isApproved ? (
+                                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 rounded">
+                                  Approved
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold bg-amber-955/40 text-amber-500 border border-amber-500/20 rounded">
+                                  Pending Approval
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Render actions only for Course Marshal (Admin) */}
+                          {role === 'admin' && (
+                            <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                              {!isApproved ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleApproveBid(bid.id || bid.$id || '', false)}
+                                  className="px-2.5 py-1 bg-emerald-900 border border-emerald-500/30 text-white font-bold text-[10px] rounded hover:bg-emerald-800 transition cursor-pointer"
+                                >
+                                  Approve
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleApproveBid(bid.id || bid.$id || '', true)}
+                                  className="px-2.5 py-1 bg-red-955/40 hover:bg-red-950 border border-red-500/20 text-red-300 font-bold text-[10px] rounded transition cursor-pointer"
+                                  title="Revoke approval"
+                                >
+                                  Revoke
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBid(bid.id || bid.$id || '')}
+                                className="p-1.5 bg-gray-750 text-gray-400 hover:text-red-400 hover:bg-red-955/20 border border-gray-700 hover:border-red-500/20 rounded transition cursor-pointer"
+                                title="Delete Pledge"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <span className="font-mono font-bold text-emerald-400 whitespace-nowrap">
-                          +${bid.bidAmount}
-                        </span>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -724,6 +913,7 @@ const HomePage: React.FC<HomePageProps> = ({
                       <li>competitorName: String, Length: 255 (Required)</li>
                       <li>bidAmount: Float/Integer (Required)</li>
                       <li>eventId: String, Length: 255 (Required)</li>
+                      <li>approvedByAdmin: Boolean (Default: false / Optional)</li>
                     </ul>
                   </div>
 
