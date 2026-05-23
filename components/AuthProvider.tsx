@@ -38,12 +38,80 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     try {
       const config = getFullDbConfig();
-      // Direct lookup by document ID (which is userId) - zero search index configuration required!
-      const doc = await databases.getDocument(
-        config.databaseId,
-        config.usersCollectionId,
-        userId
-      );
+      let doc: any = null;
+
+      // 1. Direct fetch by Document ID (which should match userId)
+      try {
+        doc = await databases.getDocument(
+          config.databaseId,
+          config.usersCollectionId,
+          userId
+        );
+      } catch (directErr: any) {
+        console.warn(`[User Role] Direct lookup failed for userId '${userId}'. Attempting query fallbacks...`, directErr.message);
+        
+        // 2. Fallback: Search the collection where email matches the logged in user's email
+        if (emailStr) {
+          try {
+            const emailClean = emailStr.toLowerCase().trim();
+            const emailQueryRes = await databases.listDocuments(
+              config.databaseId,
+              config.usersCollectionId,
+              [query.equal('email', emailClean)]
+            );
+            if (emailQueryRes && emailQueryRes.documents.length > 0) {
+              doc = emailQueryRes.documents[0];
+              console.log(`[User Role] Successfully resolved user role via email query: '${emailClean}' -> role: '${doc.role}'`);
+            }
+          } catch (emailQueryErr: any) {
+            console.warn("[User Role] Query by email failed:", emailQueryErr.message);
+          }
+        }
+
+        // 3. Fallback: Search the collection where userId matches (in case it is a custom attribute)
+        if (!doc) {
+          try {
+            const idQueryRes = await databases.listDocuments(
+              config.databaseId,
+              config.usersCollectionId,
+              [query.equal('userId', userId)]
+            );
+            if (idQueryRes && idQueryRes.documents.length > 0) {
+              doc = idQueryRes.documents[0];
+              console.log(`[User Role] Successfully resolved user role via userId attribute query: '${userId}' -> role: '${doc.role}'`);
+            }
+          } catch (idQueryErr: any) {
+            console.warn("[User Role] Query by userId attribute failed:", idQueryErr.message);
+          }
+        }
+
+        // 4. Try client-side scan of the collection as a final backstop
+        if (!doc) {
+          try {
+            const allDocs = await databases.listDocuments(
+              config.databaseId,
+              config.usersCollectionId,
+              []
+            );
+            const matchingDoc = allDocs.documents.find((d: any) => 
+              (d.email && d.email.toLowerCase().trim() === emailStr.toLowerCase().trim()) ||
+              (d.userId && d.userId === userId) ||
+              (d.$id && d.$id === userId)
+            );
+            if (matchingDoc) {
+              doc = matchingDoc;
+              console.log(`[User Role] Successfully resolved user role via collection scan -> role: '${doc.role}'`);
+            }
+          } catch (scanErr: any) {
+            console.warn("[User Role] Scan of collection failed:", scanErr.message);
+          }
+        }
+
+        // If all fallbacks failed, throw the original direct lookup error to trigger default auto-creation/handling
+        if (!doc) {
+          throw directErr;
+        }
+      }
 
       setDbRolesConfigured(true);
       const fetchedRole = doc.role as UserRole;
