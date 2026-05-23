@@ -242,7 +242,7 @@ const LoginPage: React.FC = () => {
                       )}
                       
                       <span className="drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.65)] font-orbitron italic">
-                        {loading ? 'LAUNCHING...' : isRegister ? 'SIGN UP & LAUNCH' : 'SIGN IN & LAUNCH'}
+                        {loading ? 'LAUNCHING...' : isRegister ? 'SIGN UP TO PLAY' : 'SIGN IN & PLAY'}
                       </span>
                     </div>
                   </button>
