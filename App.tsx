@@ -191,13 +191,7 @@ const AppContent: React.FC = () => {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-        <main className="container mx-auto p-4 md:p-8">
-          <LoginPage />
-        </main>
-      </div>
-    );
+    return <LoginPage />;
   }
 
   return (
