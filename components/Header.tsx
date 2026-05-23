@@ -2,10 +2,51 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
+import { Settings as SettingsIcon, RotateCcw, X, Database, Save } from 'lucide-react';
+import { getFullDbConfig, saveFullDbConfig } from '../lib/appwrite';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, logout, role, dbRole, dbRolesConfigured, toggleSimulatedRole, isConfigured } = useAuth();
+  
+  // Settings Form State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dbId, setDbId] = useState('');
+  const [eventsId, setEventsId] = useState('');
+  const [usersId, setUsersId] = useState('');
+  const [bidsId, setBidsId] = useState('');
+
+  const openSettings = () => {
+    const config = getFullDbConfig();
+    setDbId(config.databaseId);
+    setEventsId(config.collectionId);
+    setUsersId(config.usersCollectionId);
+    setBidsId(config.bidsCollectionId);
+    setIsSettingsOpen(true);
+  };
+
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveFullDbConfig({
+      databaseId: dbId.trim(),
+      collectionId: eventsId.trim(),
+      usersCollectionId: usersId.trim(),
+      bidsCollectionId: bidsId.trim(),
+    });
+    setIsSettingsOpen(false);
+    window.location.reload();
+  };
+
+  const handleResetSettings = () => {
+    if (confirm("Are you sure you want to revert all IDs to system environment default configurations (.env values)?")) {
+      localStorage.removeItem('appwrite_database_id');
+      localStorage.removeItem('appwrite_collection_id');
+      localStorage.removeItem('appwrite_users_collection_id');
+      localStorage.removeItem('appwrite_bids_collection_id');
+      setIsSettingsOpen(false);
+      window.location.reload();
+    }
+  };
 
   const activeLinkStyle = {
     color: '#38bdf8', // light blue for active link
@@ -48,7 +89,7 @@ const Header: React.FC = () => {
         </div>
 
         <div className="hidden md:flex items-center space-x-6">
-          <ul className="flex space-x-6 text-lg mr-4">
+          <ul className="flex space-x-5 text-lg mr-4 items-center">
             <li>
               <NavLink
                 to="/"
@@ -77,6 +118,16 @@ const Header: React.FC = () => {
               >
                 Results
               </NavLink>
+            </li>
+            <li>
+              <button
+                onClick={openSettings}
+                className="p-1.5 px-2.5 text-xs text-sky-400 hover:text-white bg-sky-950/40 hover:bg-sky-900 border border-sky-850/40 hover:border-sky-500/30 rounded flex items-center gap-1.5 transition cursor-pointer font-semibold"
+                title="Database Configuration"
+              >
+                <SettingsIcon className="h-3.5 w-3.5 animate-[spin_10s_linear_infinite]" />
+                <span>Db Settings</span>
+              </button>
             </li>
           </ul>
 
@@ -158,6 +209,18 @@ const Header: React.FC = () => {
                 Results
                 </NavLink>
             </li>
+            <li className="w-full px-4 py-1 flex justify-center">
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    openSettings();
+                  }}
+                  className="w-full text-center hover:text-sky-400 transition-colors duration-300 px-4 py-2 flex items-center justify-center gap-1.5 cursor-pointer font-bold text-sky-400/90 text-sm border border-gray-700 hover:border-sky-500/35 rounded bg-gray-750/30"
+                >
+                  <SettingsIcon className="h-4 w-4 animate-[spin_12s_linear_infinite]" />
+                  <span>Database Settings</span>
+                </button>
+            </li>
 
             {user && (
               <li className="w-full pt-4 border-t border-gray-750/60 flex flex-col items-center gap-2 px-6">
@@ -201,6 +264,124 @@ const Header: React.FC = () => {
             )}
 
             </ul>
+        </div>
+      )}
+
+      {/* Appwrite Settings Portal Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-gray-800 border border-gray-750 rounded-xl max-w-lg w-full shadow-2xl overflow-hidden transition-all transform scale-100 flex flex-col text-left">
+            <div className="bg-gray-850 p-5 border-b border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sky-400">
+                <Database className="h-5 w-5 animate-pulse" />
+                <h3 className="font-bold text-lg text-white font-sans">Appwrite Database Settings</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-gray-400 hover:text-white p-1 hover:bg-gray-700 rounded transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSettings} className="p-6 space-y-4">
+              <p className="text-xs text-gray-400 leading-normal">
+                These settings are stored locally in your browser's <code className="text-sky-300 font-mono bg-gray-900 px-1 py-0.5 rounded">localStorage</code> to override env configurations.
+              </p>
+
+              <div className="space-y-3">
+                {/* Database ID Input */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-450 mb-1">
+                    Appwrite Database ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={dbId}
+                    onChange={(e) => setDbId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
+                    placeholder="e.g. 6a0f6ada00142e16390e"
+                  />
+                </div>
+
+                {/* Events Collection ID Input */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-450 mb-1">
+                    Event Registration Collection ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={eventsId}
+                    onChange={(e) => setEventsId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
+                    placeholder="e.g. events"
+                  />
+                </div>
+
+                {/* Users Collection ID Input */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-450 mb-1">
+                    User Roles Collection ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={usersId}
+                    onChange={(e) => setUsersId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-sky-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors font-bold"
+                    placeholder="e.g. users"
+                  />
+                </div>
+
+                {/* Bids Collection ID Input */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-450 mb-1">
+                    Support Pledges Collection ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bidsId}
+                    onChange={(e) => setBidsId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
+                    placeholder="e.g. bids"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-750 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleResetSettings}
+                  className="w-full sm:w-auto px-3 py-2 bg-gray-700/60 hover:bg-red-950/40 hover:text-red-300 rounded border border-gray-650 hover:border-red-900/30 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  title="Wipe LocalStorage configurations and read .env values directly."
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Use Sys Defaults (.env)</span>
+                </button>
+
+                <div className="flex gap-2.5 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="px-4 py-2 bg-gray-700/40 hover:bg-gray-750 text-gray-350 hover:text-white rounded text-xs font-bold tracking-wide uppercase transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold tracking-wide uppercase flex items-center gap-1.5 transition cursor-pointer shadow"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    <span>Save & Reload</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </header>

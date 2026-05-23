@@ -12,7 +12,6 @@ import { databases, getDbConfig, isAppwriteConfigured } from './lib/appwrite';
 const AppContent: React.FC = () => {
   const { user, loading, role } = useAuth();
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
-  const [recoveredNotice, setRecoveredNotice] = useState<string | null>(null);
   
   const [currentEventId, setCurrentEventId] = useState<string | null>(() => {
     return localStorage.getItem('appwrite_active_event_id');
@@ -79,26 +78,9 @@ const AppContent: React.FC = () => {
         setCompetitors(parsedCompetitors);
         setSyncStatus('synced');
         setIsActiveEventLoaded(true);
-      } catch (err: any) {
-        const errMsg = err?.message || '';
-        const errCode = err?.code;
-        const isNotFound = errCode === 404 || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('could not be found');
-        
-        if (isNotFound) {
-          console.warn(`[Event Recovery] The stored active event ID '${currentEventId}' no longer exists in Appwrite (it may have been deleted). Resetting stale session.`);
-          setRecoveredNotice(`The previously active competition event "${currentEventName || 'Unknown Event'}" could not be found or has been deleted from the database. Active event has been reset.`);
-        } else {
-          console.error("Failed to recover Appwrite active event, reverting to offline state:", err);
-          setRecoveredNotice("An error occurred while recovering the active database event connection. Falling back to default.");
-        }
-        
-        // Clean up stale configuration in localStorage to prevent getting stuck
-        localStorage.removeItem('appwrite_active_event_id');
-        localStorage.removeItem('appwrite_active_event_name');
-        setCurrentEventId(null);
-        setCurrentEventName(null);
-        setCompetitors([]);
-        setSyncStatus(null);
+      } catch (err) {
+        console.error("Failed to recover Appwrite active event, reverting to offline state:", err);
+        setSyncStatus('error');
         setIsActiveEventLoaded(true);
       } finally {
         setLoadingActiveEvent(false);
@@ -222,20 +204,6 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
       <Header />
       <main className="container mx-auto p-4 md:p-8">
-        {recoveredNotice && (
-          <div className="mb-6 bg-amber-950/40 border border-amber-500/20 text-amber-200 p-4 rounded-xl flex items-center justify-between gap-4 animate-fade-in shadow-lg">
-            <div className="flex items-center gap-3">
-              <span className="p-2 bg-amber-500/10 rounded-lg text-amber-400 font-bold">⚠️</span>
-              <p className="text-sm font-sans">{recoveredNotice}</p>
-            </div>
-            <button 
-              onClick={() => setRecoveredNotice(null)} 
-              className="text-amber-400 hover:text-amber-200 text-xs font-bold uppercase transition bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1.5 rounded cursor-pointer"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
         <Routes>
           <Route
             path="/"
