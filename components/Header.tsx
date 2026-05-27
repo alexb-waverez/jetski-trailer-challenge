@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { Settings as SettingsIcon, RotateCcw, X, Database, Save } from 'lucide-react';
 import { getFullDbConfig, saveFullDbConfig } from '../lib/appwrite';
+import waveLogo from '../src/assets/images/dark_wave_favicon_1779903270799.png';
 
 const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -61,7 +62,7 @@ const Header: React.FC = () => {
       <nav className="container mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
         <NavLink to="/" onClick={closeMenu} className="group flex items-center text-xl sm:text-2xl font-bold text-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg p-1 -ml-1">
             <img 
-              src="/src/assets/images/dark_wave_favicon_1779903270799.png" 
+              src={waveLogo} 
               alt="Blue Wave Logo" 
               className="h-10 w-10 mr-3 rounded-lg border border-sky-455/20 shadow-md shadow-sky-500/15 object-cover transition-transform duration-300 group-hover:scale-110 flex-shrink-0"
               referrerPolicy="no-referrer"
