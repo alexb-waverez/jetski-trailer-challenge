@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Competitor, Bid, CompetitorStatus } from '../types';
 import { 
   databases, 
@@ -22,12 +23,16 @@ import {
   Lock, 
   Check,
   Coins,
-  History
+  History,
+  Edit2,
+  X,
+  Play
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
 interface HomePageProps {
   addCompetitor: (fullName: string, companyName: string) => void;
+  deleteCompetitor: (id: string) => void;
   competitors: Competitor[];
   resetCompetition: () => void;
   currentEventId: string | null;
@@ -35,22 +40,49 @@ interface HomePageProps {
   syncStatus: 'synced' | 'saving' | 'error' | 'local' | null;
   selectEvent: (eventId: string, eventName: string, competitors: Competitor[]) => void;
   closeEvent: () => void;
+  renameActiveEvent?: (newName: string) => Promise<void>;
 }
 
 const HomePage: React.FC<HomePageProps> = ({ 
   addCompetitor, 
+  deleteCompetitor,
   competitors, 
   resetCompetition,
   currentEventId,
   currentEventName,
   syncStatus,
   selectEvent,
-  closeEvent
+  closeEvent,
+  renameActiveEvent
 }) => {
   const { user, role, dbRolesConfigured, toggleSimulatedRole } = useAuth();
+  const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
+
+  const [showCancelEventPrompt, setShowCancelEventPrompt] = useState(false);
+  const [competitorToDelete, setCompetitorToDelete] = useState<string | null>(null);
+  const [pledgeToDelete, setPledgeToDelete] = useState<string | null>(null);
+
+  const [isEditingActiveName, setIsEditingActiveName] = useState(false);
+  const [activeNameInput, setActiveNameInput] = useState(currentEventName || '');
+
+  useEffect(() => {
+    setActiveNameInput(currentEventName || '');
+  }, [currentEventName]);
+
+  const handleSaveActiveName = async () => {
+    if (activeNameInput.trim() && renameActiveEvent) {
+      await renameActiveEvent(activeNameInput.trim());
+      setIsEditingActiveName(false);
+    }
+  };
+
+  const handleCancelEvent = () => {
+    closeEvent();
+    setShowCancelEventPrompt(false);
+  };
   
   // Appwrite Management State
   const [existingEvents, setExistingEvents] = useState<any[]>([]);
@@ -324,7 +356,6 @@ const HomePage: React.FC<HomePageProps> = ({
 
   const handleDeleteBid = async (bidId: string) => {
     if (role !== 'admin') return;
-    if (!window.confirm("Are you sure you want to remove this support pledge?")) return;
 
     const updatedList = bids.filter(b => b.id !== bidId && b.$id !== bidId);
     setBids(updatedList);
@@ -418,20 +449,70 @@ const HomePage: React.FC<HomePageProps> = ({
                 ROLE: {role}
               </span>
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight leading-none">
-              {currentEventName}
-            </h1>
-            <p className="text-sm text-gray-400 font-mono">
-              Database Row Reference: <span className="text-sky-305">{currentEventId === 'local' ? 'OFFLINE_STATE' : currentEventId}</span>
-            </p>
+            {isEditingActiveName && isAdmin ? (
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="text"
+                  value={activeNameInput}
+                  onChange={(e) => setActiveNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveActiveName();
+                    if (e.key === 'Escape') setIsEditingActiveName(false);
+                  }}
+                  className="bg-gray-900 border border-sky-500/50 text-white font-bold text-lg md:text-xl rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-sky-500 max-w-sm sm:max-w-md w-full"
+                  placeholder="Enter challenge event title..."
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveActiveName}
+                  className="p-2 bg-sky-600 hover:bg-sky-500 rounded text-white font-bold transition cursor-pointer shrink-0"
+                  title="Save Name"
+                >
+                  <Check className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingActiveName(false);
+                    setActiveNameInput(currentEventName || '');
+                  }}
+                  className="p-2 bg-gray-750 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition cursor-pointer shrink-0"
+                  title="Cancel"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <h1 className="text-3xl font-extrabold text-white tracking-tight leading-none flex items-center gap-3 group">
+                <span>{currentEventName}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsEditingActiveName(true)}
+                    className="p-1 text-gray-400 hover:text-sky-400 hover:bg-sky-950/40 rounded transition opacity-0 md:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                    title="Rename challenge event"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                )}
+              </h1>
+            )}
+
           </div>
 
           <div className="flex gap-3">
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/competition')}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold transition rounded-md border border-sky-500 font-semibold text-sm cursor-pointer flex items-center gap-1.5 shadow-md shadow-sky-500/10"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                <span>Start Competition</span>
+              </button>
+            )}
             <button
               onClick={closeEvent}
               className="px-4 py-2 bg-gray-700/80 hover:bg-gray-700 text-gray-200 hover:text-white transition rounded-md border border-gray-650 font-semibold text-sm cursor-pointer"
             >
-              Switch Event / Logout
+              Switch Event
             </button>
           </div>
         </div>
@@ -614,12 +695,30 @@ const HomePage: React.FC<HomePageProps> = ({
                 </div>
                 
                 {competitors.length > 0 && isAdmin && (
-                  <button 
-                    onClick={resetCompetition}
-                    className="py-1.5 px-3 bg-red-955/40 hover:bg-red-900 border border-red-500/30 hover:border-red-550 text-red-200 text-xs font-bold rounded-md transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Clear and Reset
-                  </button>
+                  showCancelEventPrompt ? (
+                    <div className="flex items-center gap-1.5 bg-red-950/40 p-1 border border-red-500/20 rounded-md">
+                      <span className="text-[10px] font-bold text-red-200 uppercase font-mono px-1">Cancel Event?</span>
+                      <button 
+                        onClick={handleCancelEvent}
+                        className="py-1 px-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded transition cursor-pointer"
+                      >
+                        Yes
+                      </button>
+                      <button 
+                        onClick={() => setShowCancelEventPrompt(false)}
+                        className="py-1 px-2 bg-gray-750 hover:bg-gray-650 text-gray-200 text-xs font-bold rounded transition cursor-pointer"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setShowCancelEventPrompt(true)}
+                      className="py-1.5 px-3 bg-red-955/40 hover:bg-red-900 border border-red-500/30 hover:border-red-550 text-red-200 text-xs font-bold rounded-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Cancel Event
+                    </button>
+                  )
                 )}
               </div>
 
@@ -649,14 +748,49 @@ const HomePage: React.FC<HomePageProps> = ({
                             </div>
                           </div>
                           
-                          <div className="text-right space-y-1">
-                            <span className="text-xs font-mono px-2.5 py-1 bg-gray-900 text-gray-400 border border-gray-750 rounded uppercase font-semibold">
-                              {c.status}
-                            </span>
-                            {compBackingSum > 0 && (
-                              <p className="text-[10px] font-mono font-bold text-emerald-450 block pt-1">
-                                Backed: ${compBackingSum}
-                              </p>
+                          <div className="flex items-center gap-3.5 text-right">
+                            <div className="space-y-1">
+                              <span className="text-xs font-mono px-2.5 py-1 bg-gray-900 text-gray-400 border border-gray-750 rounded uppercase font-semibold block w-fit ml-auto">
+                                {c.status}
+                              </span>
+                              {compBackingSum > 0 && (
+                                <p className="text-[10px] font-mono font-bold text-emerald-450 block pt-1">
+                                  Backed: ${compBackingSum}
+                                </p>
+                              )}
+                            </div>
+
+                            {isAdmin && (
+                              competitorToDelete === c.id ? (
+                                <div className="flex items-center gap-1 bg-red-955/40 p-1 border border-red-500/20 rounded">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      deleteCompetitor(c.id);
+                                      setCompetitorToDelete(null);
+                                    }}
+                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase rounded transition cursor-pointer"
+                                  >
+                                    Yes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCompetitorToDelete(null)}
+                                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 text-[10px] font-bold rounded transition cursor-pointer"
+                                  >
+                                    No
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setCompetitorToDelete(c.id)}
+                                  className="p-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/20 hover:border-red-500/40 text-red-400 hover:text-red-200 rounded transition cursor-pointer"
+                                  title="Remove Competitor"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )
                             )}
                           </div>
                         </li>
@@ -827,14 +961,36 @@ const HomePage: React.FC<HomePageProps> = ({
                                   Revoke
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteBid(bid.id || bid.$id || '')}
-                                className="p-1.5 bg-gray-750 text-gray-400 hover:text-red-400 hover:bg-red-955/20 border border-gray-700 hover:border-red-500/20 rounded transition cursor-pointer"
-                                title="Delete Pledge"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              {pledgeToDelete === (bid.id || bid.$id) ? (
+                                <div className="flex items-center gap-1 bg-red-955/40 p-1 border border-red-500/20 rounded">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleDeleteBid(bid.id || bid.$id || '');
+                                      setPledgeToDelete(null);
+                                    }}
+                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded transition cursor-pointer"
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPledgeToDelete(null)}
+                                    className="px-2 py-1 bg-gray-750 hover:bg-gray-700 text-gray-300 text-[10px] font-bold rounded transition cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setPledgeToDelete(bid.id || bid.$id || '')}
+                                  className="p-1.5 bg-gray-750 text-gray-400 hover:text-red-400 hover:bg-red-955/20 border border-gray-700 hover:border-red-500/20 rounded transition cursor-pointer"
+                                  title="Delete Pledge"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

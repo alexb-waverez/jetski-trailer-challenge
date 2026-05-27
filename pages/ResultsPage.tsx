@@ -22,7 +22,10 @@ import {
   XCircle,
   CheckCircle2,
   Loader2,
-  Trash2
+  Trash2,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
@@ -31,6 +34,9 @@ declare var jspdf: any;
 
 interface ResultsPageProps {
   competitors: Competitor[];
+  currentEventName: string | null;
+  currentEventId: string | null;
+  renameActiveEvent?: (newName: string) => Promise<void>;
 }
 
 const PENALTY_MS = 5000;
@@ -46,7 +52,12 @@ const formatTime = (ms: number | null): string => {
     ).padStart(3, '0')}`;
 };
 
-const ResultsPage: React.FC<ResultsPageProps> = ({ competitors }) => {
+const ResultsPage: React.FC<ResultsPageProps> = ({ 
+    competitors, 
+    currentEventName, 
+    currentEventId, 
+    renameActiveEvent 
+}) => {
     const { role } = useAuth();
     const [isSavingPdf, setIsSavingPdf] = useState(false);
     const resultsRef = useRef<HTMLDivElement>(null);
@@ -56,20 +67,75 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ competitors }) => {
     const [pastEvents, setPastEvents] = useState<any[]>([]);
     const [loadingPast, setLoadingPast] = useState(false);
     const [pastError, setPastError] = useState<string | null>(null);
+    const [eventToDelete, setEventToDelete] = useState<string | null>(null);
     
     // States for currently viewing a historical past event leaderboard
     const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
     const [selectedEventName, setSelectedEventName] = useState<string | null>(null);
     const [selectedEventCompetitors, setSelectedEventCompetitors] = useState<Competitor[] | null>(null);
 
-    // Delete a past event
-    const handleDeletePastEvent = async (e: React.MouseEvent, docId: string) => {
-        e.stopPropagation();
+    // States for editing event names
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editNameValue, setEditNameValue] = useState('');
+
+    useEffect(() => {
+        if (selectedEventId) {
+            setEditNameValue(selectedEventName || '');
+        } else {
+            setEditNameValue(currentEventName || '');
+        }
+        setIsEditingName(false);
+    }, [selectedEventId, selectedEventName, currentEventName]);
+
+    const handleRenameSelectedEvent = async () => {
+        if (!editNameValue.trim()) return;
+        const newName = editNameValue.trim();
+
         if (role !== 'admin') {
-            alert("Only administrators are permitted to delete past events!");
+            alert("Only administrators can rename events!");
             return;
         }
-        if (!window.confirm("Are you sure you want to delete this past event? This action cannot be undone.")) {
+
+        if (selectedEventId) {
+            if (selectedEventId === 'local_offline') {
+                alert("Cannot rename the local offline state.");
+                return;
+            }
+            try {
+                const config = getDbConfig();
+                const updateData: Record<string, any> = {
+                    eventName: newName
+                };
+                await databases.updateDocument(
+                    config.databaseId,
+                    config.collectionId,
+                    selectedEventId,
+                    updateData
+                );
+                setSelectedEventName(newName);
+                setIsEditingName(false);
+                fetchPastEvents();
+            } catch (err: any) {
+                console.error("Failed to rename historical event:", err);
+                alert("Failed to rename historical event: " + (err.message || err));
+            }
+        } else {
+            if (renameActiveEvent) {
+                try {
+                    await renameActiveEvent(newName);
+                    setIsEditingName(false);
+                } catch (err: any) {
+                    console.error("Failed to rename active event:", err);
+                    alert("Failed to rename active event: " + (err.message || err));
+                }
+            }
+        }
+    };
+
+    // Delete a past event
+    const handleDeletePastEvent = async (docId: string) => {
+        if (role !== 'admin') {
+            alert("Only administrators are permitted to delete past events!");
             return;
         }
         try {
@@ -318,16 +384,57 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ competitors }) => {
 
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-4 mb-6">
                   <div>
-                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                      <Award className="h-5.5 w-5.5 text-sky-400" />
-                      {isViewingHistorical ? selectedEventName : 'Active Run Leaderboard'}
-                    </h2>
-                    <p className="text-xs text-gray-400 font-mono mt-1">
-                      {isViewingHistorical ? `Historical Registry: ${selectedEventId}` : 'Live timing database registry'}
-                    </p>
+                    {isEditingName && (role === 'admin') ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editNameValue}
+                          onChange={(e) => setEditNameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameSelectedEvent();
+                            if (e.key === 'Escape') setIsEditingName(false);
+                          }}
+                          className="bg-gray-850 border border-sky-400/50 text-white font-extrabold text-lg md:text-xl rounded px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-sky-500 max-w-sm w-full"
+                          placeholder="Rename challenge..."
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleRenameSelectedEvent}
+                          className="p-1.5 bg-sky-600 hover:bg-sky-550 rounded text-white font-bold transition cursor-pointer"
+                          title="Save Name"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditingName(false);
+                            setEditNameValue(isViewingHistorical ? (selectedEventName || '') : (currentEventName || ''));
+                          }}
+                          className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition cursor-pointer"
+                          title="Cancel"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2 group">
+                        <Award className="h-5.5 w-5.5 text-sky-400 shrink-0" />
+                        <span>{isViewingHistorical ? selectedEventName : (currentEventName || 'Active Run Leaderboard')}</span>
+                        {(role === 'admin') && (selectedEventId !== 'local_offline') && (
+                          <button
+                            onClick={() => setIsEditingName(true)}
+                            className="p-1 text-gray-400 hover:text-sky-400 hover:bg-sky-950/40 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                            title="Rename challenge event"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </h2>
+                    )}
+
                   </div>
                   <div className="text-left md:text-right font-mono text-xs text-gray-450">
-                    <p className="font-bold text-sky-450 uppercase tracking-widest text-[10px]">Challenge Export Report</p>
+                    <p className="font-bold text-sky-455 uppercase tracking-widest text-[10px]">Challenge Export Report</p>
                     <p className="mt-0.5">Timestamp: {generatedAt}</p>
                   </div>
                 </div>
@@ -529,14 +636,41 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ competitors }) => {
                         </button>
 
                         {isAdmin && (
-                          <button
-                            onClick={(e) => handleDeletePastEvent(e, doc.$id)}
-                            title="Delete Past Event"
-                            aria-label={`Delete event ${doc.eventName}`}
-                            className="p-3 text-gray-400 hover:text-red-400 bg-gray-750/30 hover:bg-red-955/20 border border-gray-700/50 hover:border-red-500/30 rounded-lg transition shrink-0 cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          eventToDelete === doc.$id ? (
+                            <div className="flex items-center gap-1.5 bg-red-955/40 p-1 border border-red-500/25 rounded-lg shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeletePastEvent(doc.$id);
+                                  setEventToDelete(null);
+                                }}
+                                className="px-2 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] uppercase font-bold rounded transition cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEventToDelete(null);
+                                }}
+                                className="px-2 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-200 text-[10px] font-bold rounded transition cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEventToDelete(doc.$id);
+                              }}
+                              title="Delete Past Event"
+                              aria-label={`Delete event ${doc.eventName}`}
+                              className="p-3 text-gray-400 hover:text-red-400 bg-gray-750/30 hover:bg-red-955/20 border border-gray-700/50 hover:border-red-500/30 rounded-lg transition shrink-0 cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )
                         )}
                       </div>
                     );

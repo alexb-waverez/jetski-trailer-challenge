@@ -5,6 +5,7 @@ import Header from './components/Header';
 import HomePage from './pages/HomePage';
 import CompetitionPage from './pages/CompetitionPage';
 import ResultsPage from './pages/ResultsPage';
+import LeaderboardPage from './pages/LeaderboardPage';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import LoginPage from './pages/LoginPage';
 import { databases, getDbConfig, isAppwriteConfigured } from './lib/appwrite';
@@ -153,6 +154,12 @@ const AppContent: React.FC = () => {
     syncCompetitors(nextList);
   };
 
+  const deleteCompetitor = (id: string) => {
+    const nextList = competitors.filter(c => c.id !== id);
+    setCompetitors(nextList);
+    syncCompetitors(nextList);
+  };
+
   const selectEvent = (eventId: string, eventName: string, eventCompetitors: Competitor[]) => {
     setCurrentEventId(eventId);
     setCurrentEventName(eventName);
@@ -174,6 +181,38 @@ const AppContent: React.FC = () => {
     setSyncStatus(null);
     localStorage.removeItem('appwrite_active_event_id');
     localStorage.removeItem('appwrite_active_event_name');
+  };
+
+  const renameActiveEvent = async (newName: string) => {
+    setCurrentEventName(newName);
+    localStorage.setItem('appwrite_active_event_name', newName);
+
+    if (currentEventId && currentEventId !== 'local') {
+      try {
+        setSyncStatus('saving');
+        const config = getDbConfig();
+        const updateData: Record<string, any> = {
+          eventName: newName,
+        };
+        
+        // Populate competitor snapshots currently in state
+        for (let i = 1; i <= 20; i++) {
+          const competitor = competitors[i - 1];
+          updateData[`competitor${i}`] = competitor ? JSON.stringify(competitor) : "";
+        }
+
+        await databases.updateDocument(
+          config.databaseId,
+          config.collectionId,
+          currentEventId,
+          updateData
+        );
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error("Failed to rename active event in Appwrite:", err);
+        setSyncStatus('error');
+      }
+    }
   };
 
   if (loading || (currentEventId && !isActiveEventLoaded)) {
@@ -204,6 +243,7 @@ const AppContent: React.FC = () => {
             element={
               <HomePage
                 addCompetitor={addCompetitor}
+                deleteCompetitor={deleteCompetitor}
                 competitors={competitors}
                 resetCompetition={resetCompetition}
                 currentEventId={currentEventId}
@@ -211,6 +251,7 @@ const AppContent: React.FC = () => {
                 syncStatus={syncStatus}
                 selectEvent={selectEvent}
                 closeEvent={closeEvent}
+                renameActiveEvent={renameActiveEvent}
               />
             }
           />
@@ -224,7 +265,27 @@ const AppContent: React.FC = () => {
               )
             }
           />
-          <Route path="/results" element={<ResultsPage competitors={competitors} />} />
+          <Route 
+            path="/results" 
+            element={
+              <ResultsPage 
+                competitors={competitors} 
+                currentEventName={currentEventName}
+                currentEventId={currentEventId}
+                renameActiveEvent={renameActiveEvent}
+              />
+            } 
+          />
+          <Route 
+            path="/leaderboard" 
+            element={
+              <LeaderboardPage 
+                competitors={competitors} 
+                currentEventName={currentEventName}
+                currentEventId={currentEventId}
+              />
+            } 
+          />
         </Routes>
       </main>
     </div>

@@ -16,12 +16,15 @@ const Header: React.FC = () => {
   const [usersId, setUsersId] = useState('');
   const [bidsId, setBidsId] = useState('');
 
+  const [showResetPrompt, setShowResetPrompt] = useState(false);
+
   const openSettings = () => {
     const config = getFullDbConfig();
     setDbId(config.databaseId);
     setEventsId(config.collectionId);
     setUsersId(config.usersCollectionId);
     setBidsId(config.bidsCollectionId);
+    setShowResetPrompt(false);
     setIsSettingsOpen(true);
   };
 
@@ -38,14 +41,12 @@ const Header: React.FC = () => {
   };
 
   const handleResetSettings = () => {
-    if (confirm("Are you sure you want to revert all IDs to system environment default configurations (.env values)?")) {
-      localStorage.removeItem('appwrite_database_id');
-      localStorage.removeItem('appwrite_collection_id');
-      localStorage.removeItem('appwrite_users_collection_id');
-      localStorage.removeItem('appwrite_bids_collection_id');
-      setIsSettingsOpen(false);
-      window.location.reload();
-    }
+    localStorage.removeItem('appwrite_database_id');
+    localStorage.removeItem('appwrite_collection_id');
+    localStorage.removeItem('appwrite_users_collection_id');
+    localStorage.removeItem('appwrite_bids_collection_id');
+    setIsSettingsOpen(false);
+    window.location.reload();
   };
 
   const activeLinkStyle = {
@@ -59,16 +60,12 @@ const Header: React.FC = () => {
     <header className="bg-gray-800 shadow-lg">
       <nav className="container mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
         <NavLink to="/" onClick={closeMenu} className="group flex items-center text-xl sm:text-2xl font-bold text-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500 rounded-lg p-1 -ml-1">
-            <div className="h-10 w-10 mr-3 rounded-full bg-sky-500 flex items-center justify-center transition-transform duration-300 group-hover:scale-110 flex-shrink-0">
-                <svg
-                    className="h-6 w-6 text-white"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <path fill="currentColor" d="M5.00832 15.2016C5.00832 15.2016 7.02683 16.5278 9.50832 16.6816C11.9898 16.8354 15.5083 15.2016 15.5083 15.2016L18.5083 13.2016L15.0083 9.20164L11.5083 9.70164L9.50832 12.2016L7.50832 11.7016L5.00832 15.2016Z" />
-                    <path d="M12.5083 9.70166L14.0083 8.20166" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-            </div>
+            <img 
+              src="/src/assets/images/blue_wave_favicon_1779902421192.png" 
+              alt="Blue Wave Logo" 
+              className="h-10 w-10 mr-3 rounded-lg border border-sky-455/20 shadow-md shadow-sky-500/15 object-cover transition-transform duration-300 group-hover:scale-110 flex-shrink-0"
+              referrerPolicy="no-referrer"
+            />
             <span className="transition-colors duration-300 group-hover:text-sky-300 hidden sm:inline">
                 Jetski Trailer Skills Challenge
             </span>
@@ -120,15 +117,27 @@ const Header: React.FC = () => {
               </NavLink>
             </li>
             <li>
-              <button
-                onClick={openSettings}
-                className="p-1.5 px-2.5 text-xs text-sky-400 hover:text-white bg-sky-950/40 hover:bg-sky-900 border border-sky-850/40 hover:border-sky-500/30 rounded flex items-center gap-1.5 transition cursor-pointer font-semibold"
-                title="Database Configuration"
+              <NavLink
+                to="/leaderboard"
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="hover:text-sky-400 transition-colors duration-300 pb-1 flex items-center gap-1 bg-emerald-950/15 border border-transparent hover:border-emerald-500/20 px-2 py-0.5 rounded-md"
               >
-                <SettingsIcon className="h-3.5 w-3.5 animate-[spin_10s_linear_infinite]" />
-                <span>Db Settings</span>
-              </button>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span>Leaderboard</span>
+              </NavLink>
             </li>
+            {role === 'admin' && (
+              <li>
+                <button
+                  onClick={openSettings}
+                  className="p-1.5 px-2.5 text-xs text-sky-400 hover:text-white bg-sky-950/40 hover:bg-sky-900 border border-sky-850/40 hover:border-sky-500/30 rounded flex items-center gap-1.5 transition cursor-pointer font-semibold"
+                  title="Database Configuration"
+                >
+                  <SettingsIcon className="h-3.5 w-3.5 animate-[spin_10s_linear_infinite]" />
+                  <span>Db Settings</span>
+                </button>
+              </li>
+            )}
           </ul>
 
           {user && (
@@ -209,18 +218,31 @@ const Header: React.FC = () => {
                 Results
                 </NavLink>
             </li>
-            <li className="w-full px-4 py-1 flex justify-center">
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    openSettings();
-                  }}
-                  className="w-full text-center hover:text-sky-400 transition-colors duration-300 px-4 py-2 flex items-center justify-center gap-1.5 cursor-pointer font-bold text-sky-400/90 text-sm border border-gray-700 hover:border-sky-500/35 rounded bg-gray-750/30"
+            <li>
+                <NavLink
+                to="/leaderboard"
+                onClick={closeMenu}
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block flex items-center justify-center gap-1.5"
                 >
-                  <SettingsIcon className="h-4 w-4 animate-[spin_12s_linear_infinite]" />
-                  <span>Database Settings</span>
-                </button>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span>Leaderboard</span>
+                </NavLink>
             </li>
+            {role === 'admin' && (
+              <li className="w-full px-4 py-1 flex justify-center">
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      openSettings();
+                    }}
+                    className="w-full text-center hover:text-sky-400 transition-colors duration-300 px-4 py-2 flex items-center justify-center gap-1.5 cursor-pointer font-bold text-sky-400/90 text-sm border border-gray-700 hover:border-sky-500/35 rounded bg-gray-750/30"
+                  >
+                    <SettingsIcon className="h-4 w-4 animate-[spin_12s_linear_infinite]" />
+                    <span>Database Settings</span>
+                  </button>
+              </li>
+            )}
 
             {user && (
               <li className="w-full pt-4 border-t border-gray-750/60 flex flex-col items-center gap-2 px-6">
@@ -353,15 +375,35 @@ const Header: React.FC = () => {
               </div>
 
               <div className="pt-4 border-t border-gray-750 flex flex-col sm:flex-row justify-between items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleResetSettings}
-                  className="w-full sm:w-auto px-3 py-2 bg-gray-700/60 hover:bg-red-950/40 hover:text-red-300 rounded border border-gray-650 hover:border-red-900/30 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  title="Wipe LocalStorage configurations and read .env values directly."
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Use Sys Defaults (.env)</span>
-                </button>
+                {showResetPrompt ? (
+                  <div className="flex items-center gap-1.5 bg-red-955/30 p-1 border border-red-500/20 rounded">
+                    <span className="text-[10px] font-bold text-red-300 font-mono px-1">Reset keys?</span>
+                    <button
+                      type="button"
+                      onClick={handleResetSettings}
+                      className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded transition cursor-pointer"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPrompt(false)}
+                      className="px-2 py-1.5 bg-gray-750 hover:bg-gray-700 text-gray-305 text-xs font-semibold rounded transition cursor-pointer"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPrompt(true)}
+                    className="w-full sm:w-auto px-3 py-2 bg-gray-700/60 hover:bg-red-950/40 hover:text-red-300 rounded border border-gray-650 hover:border-red-900/30 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    title="Wipe LocalStorage configurations and read .env values directly."
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Use Sys Defaults (.env)</span>
+                  </button>
+                )}
 
                 <div className="flex gap-2.5 w-full sm:w-auto justify-end">
                   <button
