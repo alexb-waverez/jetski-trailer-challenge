@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Competitor, CompetitorStatus } from './types';
 import Header from './components/Header';
@@ -23,6 +23,17 @@ const AppContent: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error' | 'local' | null>(null);
   const [isActiveEventLoaded, setIsActiveEventLoaded] = useState(false);
   const [loadingActiveEvent, setLoadingActiveEvent] = useState(false);
+
+  // Concurrency & state tracking refs for Database Write Optimizations
+  const isSyncingRef = useRef(false);
+  const pendingSyncRef = useRef<Competitor[] | null>(null);
+  const lastSyncedPayloadRef = useRef<string>("");
+  const currentEventNameRef = useRef<string | null>(currentEventName);
+
+  // Synchronize ref with interactive user changes to prevent stale closure data in the write-stream
+  useEffect(() => {
+    currentEventNameRef.current = currentEventName;
+  }, [currentEventName]);
 
   // Restore/Load Active Event state on startup
   useEffect(() => {
@@ -77,6 +88,8 @@ const AppContent: React.FC = () => {
           }
         }
         setCompetitors(parsedCompetitors);
+        // Save initial payload reference to prevent redundant writes
+        lastSyncedPayloadRef.current = JSON.stringify(parsedCompetitors);
         setSyncStatus('synced');
         setIsActiveEventLoaded(true);
       } catch (err) {
@@ -91,7 +104,7 @@ const AppContent: React.FC = () => {
     fetchStoredEvent();
   }, [currentEventId]);
 
-  // Unified save handler
+  // Unified save handler with atomic queuing and redundancy controls
   const syncCompetitors = async (updatedCompetitors: Competitor[]) => {
     if (!currentEventId) return;
 
@@ -101,29 +114,62 @@ const AppContent: React.FC = () => {
       return;
     }
 
-    setSyncStatus('saving');
-    try {
-      const config = getDbConfig();
-      const updateData: Record<string, any> = {
-        eventName: currentEventName || 'Challenge Event',
-      };
-      
-      for (let i = 1; i <= 20; i++) {
-        const competitor = updatedCompetitors[i - 1];
-        updateData[`competitor${i}`] = competitor ? JSON.stringify(competitor) : "";
-      }
-
-      await databases.updateDocument(
-        config.databaseId,
-        config.collectionId,
-        currentEventId,
-        updateData
-      );
-      setSyncStatus('synced');
-    } catch (err) {
-      console.error("Failed to synchronize competitor state to Appwrite:", err);
-      setSyncStatus('error');
+    const payloadString = JSON.stringify(updatedCompetitors);
+    // 1. Redundancy Avoidance: Skip saving if the payload hasn't changed from what's currently synced/saved
+    if (payloadString === lastSyncedPayloadRef.current) {
+      return;
     }
+
+    // 2. Queueing/Serializing Writes: If already syncing, stack this list to be executed right after
+    if (isSyncingRef.current) {
+      pendingSyncRef.current = updatedCompetitors;
+      setSyncStatus('saving');
+      return;
+    }
+
+    isSyncingRef.current = true;
+    setSyncStatus('saving');
+
+    const executeSync = async (competitorsToSync: Competitor[]) => {
+      const config = getDbConfig();
+      const currentPayload = JSON.stringify(competitorsToSync);
+      
+      try {
+        const updateData: Record<string, any> = {
+          eventName: currentEventNameRef.current || 'Challenge Event',
+        };
+        
+        for (let i = 1; i <= 20; i++) {
+          const competitor = competitorsToSync[i - 1];
+          updateData[`competitor${i}`] = competitor ? JSON.stringify(competitor) : "";
+        }
+
+        await databases.updateDocument(
+          config.databaseId,
+          config.collectionId,
+          currentEventId,
+          updateData
+        );
+        
+        lastSyncedPayloadRef.current = currentPayload;
+        setSyncStatus('synced');
+      } catch (err) {
+        console.error("Failed to synchronize competitor state to Appwrite:", err);
+        setSyncStatus('error');
+      } finally {
+        // Check if a new update occurred during the write
+        if (pendingSyncRef.current) {
+          const nextSyncPayload = pendingSyncRef.current;
+          pendingSyncRef.current = null;
+          // Execute the next sync with the latest accumulated state
+          await executeSync(nextSyncPayload);
+        } else {
+          isSyncingRef.current = false;
+        }
+      }
+    };
+
+    await executeSync(updatedCompetitors);
   };
 
   const addCompetitor = (fullName: string, companyName: string) => {
@@ -163,7 +209,9 @@ const AppContent: React.FC = () => {
   const selectEvent = (eventId: string, eventName: string, eventCompetitors: Competitor[]) => {
     setCurrentEventId(eventId);
     setCurrentEventName(eventName);
+    currentEventNameRef.current = eventName;
     setCompetitors(eventCompetitors);
+    lastSyncedPayloadRef.current = JSON.stringify(eventCompetitors);
     setSyncStatus(eventId === 'local' ? 'local' : 'synced');
     setIsActiveEventLoaded(true);
     
@@ -177,7 +225,11 @@ const AppContent: React.FC = () => {
   const closeEvent = () => {
     setCurrentEventId(null);
     setCurrentEventName(null);
+    currentEventNameRef.current = null;
     setCompetitors([]);
+    lastSyncedPayloadRef.current = "";
+    pendingSyncRef.current = null;
+    isSyncingRef.current = false;
     setSyncStatus(null);
     localStorage.removeItem('appwrite_active_event_id');
     localStorage.removeItem('appwrite_active_event_name');
@@ -185,33 +237,12 @@ const AppContent: React.FC = () => {
 
   const renameActiveEvent = async (newName: string) => {
     setCurrentEventName(newName);
+    currentEventNameRef.current = newName;
     localStorage.setItem('appwrite_active_event_name', newName);
 
     if (currentEventId && currentEventId !== 'local') {
-      try {
-        setSyncStatus('saving');
-        const config = getDbConfig();
-        const updateData: Record<string, any> = {
-          eventName: newName,
-        };
-        
-        // Populate competitor snapshots currently in state
-        for (let i = 1; i <= 20; i++) {
-          const competitor = competitors[i - 1];
-          updateData[`competitor${i}`] = competitor ? JSON.stringify(competitor) : "";
-        }
-
-        await databases.updateDocument(
-          config.databaseId,
-          config.collectionId,
-          currentEventId,
-          updateData
-        );
-        setSyncStatus('synced');
-      } catch (err) {
-        console.error("Failed to rename active event in Appwrite:", err);
-        setSyncStatus('error');
-      }
+      // Reuse the robust queue-concurrency handler
+      await syncCompetitors(competitors);
     }
   };
 
