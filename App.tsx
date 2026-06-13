@@ -6,6 +6,8 @@ import HomePage from './pages/HomePage';
 import CompetitionPage from './pages/CompetitionPage';
 import ResultsPage from './pages/ResultsPage';
 import LeaderboardPage from './pages/LeaderboardPage';
+import AttendeesPage from './pages/AttendeesPage';
+import BidsPage from './pages/BidsPage';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import LoginPage from './pages/LoginPage';
 import { databases, getDbConfig, isAppwriteConfigured } from './lib/appwrite';
@@ -296,6 +298,16 @@ const AppContent: React.FC = () => {
               )
             }
           />
+          <Route
+            path="/attendees"
+            element={
+              role === 'admin' ? (
+                <AttendeesPage />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
           <Route 
             path="/results" 
             element={
@@ -314,6 +326,16 @@ const AppContent: React.FC = () => {
                 competitors={competitors} 
                 currentEventName={currentEventName}
                 currentEventId={currentEventId}
+              />
+            } 
+          />
+          <Route 
+            path="/bids" 
+            element={
+              <BidsPage 
+                competitors={competitors} 
+                currentEventId={currentEventId}
+                currentEventName={currentEventName}
               />
             } 
           />

@@ -16,6 +16,7 @@ const Header: React.FC = () => {
   const [eventsId, setEventsId] = useState('');
   const [usersId, setUsersId] = useState('');
   const [bidsId, setBidsId] = useState('');
+  const [attendeesId, setAttendeesId] = useState('');
 
   const [showResetPrompt, setShowResetPrompt] = useState(false);
 
@@ -25,6 +26,7 @@ const Header: React.FC = () => {
     setEventsId(config.collectionId);
     setUsersId(config.usersCollectionId);
     setBidsId(config.bidsCollectionId);
+    setAttendeesId(config.attendeesCollectionId);
     setShowResetPrompt(false);
     setIsSettingsOpen(true);
   };
@@ -36,6 +38,7 @@ const Header: React.FC = () => {
       collectionId: eventsId.trim(),
       usersCollectionId: usersId.trim(),
       bidsCollectionId: bidsId.trim(),
+      attendeesCollectionId: attendeesId.trim(),
     });
     setIsSettingsOpen(false);
     window.location.reload();
@@ -46,6 +49,7 @@ const Header: React.FC = () => {
     localStorage.removeItem('appwrite_collection_id');
     localStorage.removeItem('appwrite_users_collection_id');
     localStorage.removeItem('appwrite_bids_collection_id');
+    localStorage.removeItem('appwrite_attendees_collection_id');
     setIsSettingsOpen(false);
     window.location.reload();
   };
@@ -98,15 +102,26 @@ const Header: React.FC = () => {
               </NavLink>
             </li>
             {role === 'admin' && (
-              <li>
-                <NavLink
-                  to="/competition"
-                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                  className="hover:text-sky-400 transition-colors duration-300 pb-1"
-                >
-                  Competition
-                </NavLink>
-              </li>
+              <>
+                <li>
+                  <NavLink
+                    to="/competition"
+                    style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                    className="hover:text-sky-400 transition-colors duration-300 pb-1"
+                  >
+                    Competition
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to="/attendees"
+                    style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                    className="hover:text-sky-400 transition-colors duration-300 pb-1"
+                  >
+                    Attendees
+                  </NavLink>
+                </li>
+              </>
             )}
             <li>
               <NavLink
@@ -115,6 +130,15 @@ const Header: React.FC = () => {
                 className="hover:text-sky-400 transition-colors duration-300 pb-1"
               >
                 Results
+              </NavLink>
+            </li>
+            <li>
+              <NavLink
+                to="/bids"
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="hover:text-sky-400 transition-colors duration-300 pb-1"
+              >
+                Bids
               </NavLink>
             </li>
             <li>
@@ -198,16 +222,28 @@ const Header: React.FC = () => {
                 </NavLink>
             </li>
             {role === 'admin' && (
-              <li>
-                  <NavLink
-                  to="/competition"
-                  onClick={closeMenu}
-                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                  className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block"
-                  >
-                  Competition
-                  </NavLink>
-              </li>
+              <>
+                <li>
+                    <NavLink
+                    to="/competition"
+                    onClick={closeMenu}
+                    style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                    className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block"
+                    >
+                    Competition
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink
+                    to="/attendees"
+                    onClick={closeMenu}
+                    style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                    className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block"
+                    >
+                    Attendees
+                    </NavLink>
+                </li>
+              </>
             )}
             <li>
                 <NavLink
@@ -217,6 +253,16 @@ const Header: React.FC = () => {
                 className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block"
                 >
                 Results
+                </NavLink>
+            </li>
+            <li>
+                <NavLink
+                to="/bids"
+                onClick={closeMenu}
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="hover:text-sky-400 transition-colors duration-300 pb-1 px-4 py-2 block font-semibold"
+                >
+                Bids
                 </NavLink>
             </li>
             <li>
@@ -371,6 +417,21 @@ const Header: React.FC = () => {
                     onChange={(e) => setBidsId(e.target.value)}
                     className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
                     placeholder="e.g. bids"
+                  />
+                </div>
+
+                {/* Attendees Collection ID Input */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-450 mb-1">
+                    Attendees Collection ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={attendeesId}
+                    onChange={(e) => setAttendeesId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-gray-950 border border-gray-750 rounded-md text-sky-400 font-mono text-xs font-bold focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-colors"
+                    placeholder="e.g. attendees"
                   />
                 </div>
               </div>

@@ -30,6 +30,7 @@ export interface DbConfig {
 export interface FullDbConfig extends DbConfig {
   usersCollectionId: string;
   bidsCollectionId: string;
+  attendeesCollectionId: string;
 }
 
 export const getDbConfig = (): DbConfig => {
@@ -46,11 +47,13 @@ export const getFullDbConfig = (): FullDbConfig => {
   const active = getDbConfig();
   const localUsers = localStorage.getItem('appwrite_users_collection_id');
   const localBids = localStorage.getItem('appwrite_bids_collection_id');
+  const localAttendees = localStorage.getItem('appwrite_attendees_collection_id');
   
   return {
     ...active,
     usersCollectionId: localUsers || import.meta.env.VITE_APPWRITE_USERS_COLLECTION_ID || 'users',
     bidsCollectionId: localBids || import.meta.env.VITE_APPWRITE_BIDS_COLLECTION_ID || 'bids',
+    attendeesCollectionId: localAttendees || import.meta.env.VITE_APPWRITE_ATTENDEES_COLLECTION_ID || 'attendees',
   };
 };
 
@@ -64,6 +67,7 @@ export const saveFullDbConfig = (config: FullDbConfig) => {
   localStorage.setItem('appwrite_collection_id', config.collectionId);
   localStorage.setItem('appwrite_users_collection_id', config.usersCollectionId);
   localStorage.setItem('appwrite_bids_collection_id', config.bidsCollectionId);
+  localStorage.setItem('appwrite_attendees_collection_id', config.attendeesCollectionId);
 };
 
 

@@ -26,12 +26,15 @@ export interface UserProfile {
 
 export interface Bid {
   id: string;
-  userId: string;
-  userName: string;
-  competitorId: string;
+  email: string;
   competitorName: string;
-  bidAmount: number;
   eventId: string;
-  approvedByAdmin?: boolean;
+}
+
+export interface Attendee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
 }
 
