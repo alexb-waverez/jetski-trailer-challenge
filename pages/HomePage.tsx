@@ -56,6 +56,7 @@ const HomePage: React.FC<HomePageProps> = ({
   renameActiveEvent
 }) => {
   const { user, role, dbRolesConfigured, toggleSimulatedRole } = useAuth();
+  const isAdmin = role === 'admin';
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
@@ -503,8 +504,6 @@ const HomePage: React.FC<HomePageProps> = ({
         return null;
     }
   };
-
-  const isAdmin = role === 'admin';
 
   // Render registration card once active event is locked/selected
   if (currentEventId) {

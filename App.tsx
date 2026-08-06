@@ -9,6 +9,7 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import AttendeesPage from './pages/AttendeesPage';
 import BidsPage from './pages/BidsPage';
 import { AuthProvider, useAuth } from './components/AuthProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import LoginPage from './pages/LoginPage';
 import { databases, getDbConfig, isAppwriteConfigured } from './lib/appwrite';
 
@@ -347,11 +348,13 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </HashRouter>
+    </ErrorBoundary>
   );
 };
 
