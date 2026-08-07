@@ -78,6 +78,24 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
     const [isEditingName, setIsEditingName] = useState(false);
     const [editNameValue, setEditNameValue] = useState('');
 
+    const formatEventCreatedDate = (dateStr?: string) => {
+        if (!dateStr) return null;
+        try {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            return d.toLocaleString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+        } catch (e) {
+            return null;
+        }
+    };
+
     useEffect(() => {
         if (selectedEventId) {
             setEditNameValue(selectedEventName || '');
@@ -628,6 +646,12 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
                             <p className={`font-bold transition text-xs truncate ${isSelected ? 'text-sky-300' : 'text-gray-200 group-hover:text-white'}`}>
                               {doc.eventName}
                             </p>
+                            {doc.$createdAt && (
+                              <p className="text-[10px] text-gray-400 flex items-center gap-1 font-mono mt-0.5">
+                                <Clock className="h-3 w-3 text-sky-400/80 shrink-0" />
+                                <span>Added {formatEventCreatedDate(doc.$createdAt)}</span>
+                              </p>
+                            )}
                           </div>
 
                           <span className={`flex-shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded ${isSelected ? 'bg-sky-950/60 text-sky-400' : 'bg-gray-800 text-gray-400'}`}>

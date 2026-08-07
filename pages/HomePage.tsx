@@ -27,7 +27,9 @@ import {
   History,
   Edit2,
   X,
-  Play
+  Play,
+  Clock,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
@@ -267,11 +269,27 @@ const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  const formatEventCreatedDate = (dateStr?: string) => {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
   // Reload events on startup
   useEffect(() => {
-    if (!currentEventId) {
-      fetchEvents();
-    }
+    fetchEvents();
   }, [currentEventId]);
 
   // Load active bids on active event selection
@@ -593,6 +611,7 @@ const HomePage: React.FC<HomePageProps> = ({
 
   // Render registration card once active event is locked/selected
   if (currentEventId) {
+    const activeDoc = existingEvents.find(doc => doc.$id === currentEventId);
     // Calculate prediction counts
     const totalPredictionsPlaced = bids.length;
     
@@ -652,18 +671,26 @@ const HomePage: React.FC<HomePageProps> = ({
                 </button>
               </div>
             ) : (
-              <h1 className="text-3xl font-extrabold text-white tracking-tight leading-none flex items-center gap-3 group">
-                <span>{currentEventName}</span>
-                {isAdmin && (
-                  <button
-                    onClick={() => setIsEditingActiveName(true)}
-                    className="p-1 text-gray-400 hover:text-sky-400 hover:bg-sky-950/40 rounded transition opacity-0 md:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
-                    title="Rename challenge event"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
+              <div>
+                <h1 className="text-3xl font-extrabold text-white tracking-tight leading-none flex items-center gap-3 group">
+                  <span>{currentEventName}</span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setIsEditingActiveName(true)}
+                      className="p-1 text-gray-400 hover:text-sky-400 hover:bg-sky-950/40 rounded transition opacity-0 md:group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                      title="Rename challenge event"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </h1>
+                {activeDoc?.$createdAt && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1.5 font-mono mt-2">
+                    <Clock className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                    <span>Added: {formatEventCreatedDate(activeDoc.$createdAt)}</span>
+                  </p>
                 )}
-              </h1>
+              </div>
             )}
 
           </div>
@@ -1224,6 +1251,12 @@ const HomePage: React.FC<HomePageProps> = ({
                         <p className="font-semibold text-white group-hover:text-sky-300 transition truncate text-sm">
                           {doc.eventName}
                         </p>
+                        {doc.$createdAt && (
+                          <p className="text-[11px] text-gray-400 flex items-center gap-1 font-mono mt-0.5">
+                            <Clock className="h-3 w-3 text-sky-400/90 shrink-0" />
+                            <span>Added {formatEventCreatedDate(doc.$createdAt)}</span>
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
