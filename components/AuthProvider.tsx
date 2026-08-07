@@ -36,97 +36,146 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDbRolesConfigured(false);
       return;
     }
+
+    const config = getFullDbConfig();
+    const normalizedEmail = (emailStr || '').trim().toLowerCase();
+
+    const applyRole = (rawRole: any) => {
+      const parsedRole: UserRole = String(rawRole || '').toLowerCase() === 'admin' ? 'admin' : 'user';
+      setDbRolesConfigured(true);
+      setDbRole(parsedRole);
+      setRole(parsedRole);
+      return parsedRole;
+    };
+
+    // Strategy 1: Direct document lookup by userId (when document $id === userId)
     try {
-      const config = getFullDbConfig();
-      // Direct lookup by document ID (which is userId) - zero search index configuration required!
       const doc = await databases.getDocument(
         config.databaseId,
         config.usersCollectionId,
         userId
       );
-
-      setDbRolesConfigured(true);
-      const fetchedRole = doc.role as UserRole;
-      setDbRole(fetchedRole);
-      setRole(fetchedRole);
-    } catch (err: any) {
-      const config = getFullDbConfig();
-      // Check if collection itself is missing vs. document missing
-      const isCollectionMissing = err.message && (
-        err.message.toLowerCase().includes('collection') && 
-        err.message.toLowerCase().includes('not found')
-      );
-
-      if (isCollectionMissing) {
-        const defaultRole: UserRole = 'user';
-        setDbRolesConfigured(true); // Lock role configuration to prevent simulated role override
-        setRole(defaultRole);
-        setDbRole(defaultRole);
+      if (doc && doc.role) {
+        applyRole(doc.role);
         return;
       }
+    } catch (err) {
+      // Document with $id === userId not found, proceed to query & list searches
+    }
 
-      const isNotFound = err.code === 404 || (err.message && err.message.toLowerCase().includes('not found'));
+    // Strategy 2: Query collection by email attribute
+    if (normalizedEmail) {
+      try {
+        const response = await databases.listDocuments(
+          config.databaseId,
+          config.usersCollectionId,
+          [query.equal('email', [normalizedEmail])]
+        );
+        if (response.documents.length > 0 && response.documents[0].role) {
+          applyRole(response.documents[0].role);
+          return;
+        }
+      } catch (err) {
+        // Query might fail if index on 'email' is missing or case mismatch
+      }
 
-      if (isNotFound) {
-        setDbRolesConfigured(true);
-        // Default newly registered to 'user'
-        const defaultRole: UserRole = 'user';
-
+      // Try query with original email string
+      if (emailStr && emailStr !== normalizedEmail) {
         try {
-          await databases.createDocument(
+          const response = await databases.listDocuments(
             config.databaseId,
             config.usersCollectionId,
-            userId,
-            {
-              email: emailStr || '',
-              role: defaultRole
-            }
+            [query.equal('email', [emailStr])]
           );
-          setDbRole(defaultRole);
-          setRole(defaultRole);
-        } catch (createErr: any) {
-          const isAlreadyExists = createErr.code === 409 || (
-            createErr.message && createErr.message.toLowerCase().includes('already exists')
-          );
-
-          if (isAlreadyExists) {
-            try {
-              const existingDoc = await databases.getDocument(
-                config.databaseId,
-                config.usersCollectionId,
-                userId
-              );
-              const existingRole = existingDoc.role as UserRole;
-              setDbRole(existingRole);
-              setRole(existingRole);
-              return;
-            } catch (readErr) {
-              console.error("Failed to read existing user role record after conflict:", readErr);
-            }
+          if (response.documents.length > 0 && response.documents[0].role) {
+            applyRole(response.documents[0].role);
+            return;
           }
-
-          console.error("Auto-creation of user role record failed:", createErr);
-          setDbRolesConfigured(true);
-          const defaultFallback = 'user';
-          setRole(defaultFallback);
-          setDbRole(defaultFallback);
-
-          const isCreateCollMissing = createErr.message && (
-            createErr.message.toLowerCase().includes('collection') && 
-            createErr.message.toLowerCase().includes('not found')
-          );
-          if (isCreateCollMissing) {
-            throw new Error(`Auto-creation of user role record failed because the collection '${config.usersCollectionId}' doesn't exist. Please configure the correct Collection IDs in the settings drawer.`);
-          }
-          throw createErr;
-        }
-      } else {
-        console.warn("Could not query User role from collection. Fallback safely to default permission:", err.message);
-        setDbRolesConfigured(true);
-        const defaultRole: UserRole = 'user';
-        setRole(defaultRole);
-        setDbRole(defaultRole);
+        } catch (err) {}
       }
+    }
+
+    // Strategy 3: Query collection by userId attribute
+    if (userId) {
+      try {
+        const response = await databases.listDocuments(
+          config.databaseId,
+          config.usersCollectionId,
+          [query.equal('userId', [userId])]
+        );
+        if (response.documents.length > 0 && response.documents[0].role) {
+          applyRole(response.documents[0].role);
+          return;
+        }
+      } catch (err) {}
+    }
+
+    // Strategy 4: Full collection scan (works even without ANY database indexes configured in Appwrite!)
+    try {
+      const response = await databases.listDocuments(
+        config.databaseId,
+        config.usersCollectionId,
+        []
+      );
+
+      const matchedDoc = response.documents.find((doc: any) => {
+        const docEmail = (doc.email || doc.userEmail || '').trim().toLowerCase();
+        const docUserId = doc.userId || doc.id || doc.$id;
+        return (
+          (normalizedEmail && docEmail === normalizedEmail) ||
+          (userId && docUserId === userId)
+        );
+      });
+
+      if (matchedDoc && matchedDoc.role) {
+        applyRole(matchedDoc.role);
+        return;
+      }
+    } catch (err: any) {
+      console.warn("Could not list documents from users collection:", err?.message);
+    }
+
+    // Strategy 5: If user record does not exist anywhere in the users collection, auto-create it
+    setDbRolesConfigured(true);
+    const defaultRole: UserRole = 'user';
+
+    try {
+      await databases.createDocument(
+        config.databaseId,
+        config.usersCollectionId,
+        userId,
+        {
+          email: normalizedEmail || emailStr || '',
+          role: defaultRole,
+          userId: userId
+        }
+      );
+      setDbRole(defaultRole);
+      setRole(defaultRole);
+    } catch (createErr: any) {
+      // If document creation fails (e.g. document $id already exists or schema mismatch)
+      const isAlreadyExists = createErr.code === 409 || (
+        createErr.message && createErr.message.toLowerCase().includes('already exists')
+      );
+
+      if (isAlreadyExists) {
+        // Try reading document one final time
+        try {
+          const existingDoc = await databases.getDocument(
+            config.databaseId,
+            config.usersCollectionId,
+            userId
+          );
+          if (existingDoc && existingDoc.role) {
+            applyRole(existingDoc.role);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      console.warn("User role record fallback applied:", createErr?.message);
+      setRole(defaultRole);
+      setDbRole(defaultRole);
     }
   };
 

@@ -23,6 +23,7 @@ import {
   Lock, 
   Check,
   Coins,
+  Sparkles,
   History,
   Edit2,
   X,
@@ -63,6 +64,8 @@ const HomePage: React.FC<HomePageProps> = ({
   const [companyName, setCompanyName] = useState('');
 
   const [showCancelEventPrompt, setShowCancelEventPrompt] = useState(false);
+  const [cancelingEvent, setCancelingEvent] = useState(false);
+  const [eventToDeleteId, setEventToDeleteId] = useState<string | null>(null);
   const [competitorToDelete, setCompetitorToDelete] = useState<string | null>(null);
   const [pledgeToDelete, setPledgeToDelete] = useState<string | null>(null);
 
@@ -80,9 +83,92 @@ const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  const handleCancelEvent = () => {
-    closeEvent();
-    setShowCancelEventPrompt(false);
+  const handleCancelEvent = async () => {
+    if (!isAdmin) {
+      alert("Only administrators are permitted to cancel or delete competition events.");
+      return;
+    }
+
+    setCancelingEvent(true);
+    try {
+      if (currentEventId && currentEventId !== 'local' && isAppwriteConfigured()) {
+        const activeConfig = getFullDbConfig();
+        // Delete event document from Appwrite collection
+        await databases.deleteDocument(
+          activeConfig.databaseId,
+          activeConfig.collectionId,
+          currentEventId
+        );
+
+        // Delete associated bids for this event if any exist
+        try {
+          const bidsResponse = await databases.listDocuments(
+            activeConfig.databaseId,
+            activeConfig.bidsCollectionId,
+            [query.equal('eventId', [currentEventId])]
+          );
+          for (const bidDoc of bidsResponse.documents) {
+            await databases.deleteDocument(
+              activeConfig.databaseId,
+              activeConfig.bidsCollectionId,
+              bidDoc.$id
+            ).catch(() => {});
+          }
+        } catch (bidErr) {
+          console.warn("Notice: Bid cleanup skipped or not needed:", bidErr);
+        }
+      } else if (currentEventId === 'local') {
+        localStorage.removeItem('offline_competitors');
+        localStorage.removeItem(`bids_${currentEventId}`);
+      }
+
+      closeEvent();
+      setShowCancelEventPrompt(false);
+      fetchEvents();
+    } catch (err: any) {
+      console.error("Failed to delete event document:", err);
+      alert("Failed to delete event from database: " + (err.message || err));
+    } finally {
+      setCancelingEvent(false);
+    }
+  };
+
+  const handleDeleteSavedEvent = async (eventId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    try {
+      if (isAppwriteConfigured()) {
+        const activeConfig = getFullDbConfig();
+        await databases.deleteDocument(
+          activeConfig.databaseId,
+          activeConfig.collectionId,
+          eventId
+        );
+
+        // Try deleting associated bids
+        try {
+          const bidsResponse = await databases.listDocuments(
+            activeConfig.databaseId,
+            activeConfig.bidsCollectionId,
+            [query.equal('eventId', [eventId])]
+          );
+          for (const bidDoc of bidsResponse.documents) {
+            await databases.deleteDocument(
+              activeConfig.databaseId,
+              activeConfig.bidsCollectionId,
+              bidDoc.$id
+            ).catch(() => {});
+          }
+        } catch (bidErr) {}
+      }
+
+      setExistingEvents(prev => prev.filter(doc => doc.$id !== eventId));
+      setEventToDeleteId(null);
+    } catch (err: any) {
+      console.error("Failed to delete event:", err);
+      alert("Failed to delete event from database: " + (err.message || err));
+    }
   };
   
   // Appwrite Management State
@@ -720,18 +806,20 @@ const HomePage: React.FC<HomePageProps> = ({
                   <p className="text-xs text-gray-450 mt-1 font-mono">List of competition candidates</p>
                 </div>
                 
-                {competitors.length > 0 && isAdmin && (
+                {isAdmin && (
                   showCancelEventPrompt ? (
                     <div className="flex items-center gap-1.5 bg-red-955/40 p-1 border border-red-500/20 rounded-md">
-                      <span className="text-[10px] font-bold text-red-200 uppercase font-mono px-1">Cancel Event?</span>
+                      <span className="text-[10px] font-bold text-red-200 uppercase font-mono px-1">Delete Event?</span>
                       <button 
                         onClick={handleCancelEvent}
-                        className="py-1 px-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded transition cursor-pointer"
+                        disabled={cancelingEvent}
+                        className="py-1 px-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-black rounded transition cursor-pointer flex items-center gap-1"
                       >
-                        Yes
+                        {cancelingEvent ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
                       </button>
                       <button 
                         onClick={() => setShowCancelEventPrompt(false)}
+                        disabled={cancelingEvent}
                         className="py-1 px-2 bg-gray-750 hover:bg-gray-650 text-gray-200 text-xs font-bold rounded transition cursor-pointer"
                       >
                         No
@@ -1125,20 +1213,59 @@ const HomePage: React.FC<HomePageProps> = ({
                   }
                   
                   return (
-                    <button
+                    <div
                       key={doc.$id}
-                      onClick={() => loadDocumentItem(doc)}
-                      className="w-full text-left p-3.5 bg-gray-750/50 hover:bg-gray-700 border border-gray-700 rounded-lg flex items-center justify-between group transition duration-200 cursor-pointer"
+                      className="w-full p-3.5 bg-gray-750/50 hover:bg-gray-700 border border-gray-700 rounded-lg flex items-center justify-between group transition duration-200"
                     >
-                      <div className="truncate pr-4">
-                        <p className="font-semibold text-white group-hover:text-sky-300 transition truncate text-sm animate-fade-in">
+                      <div 
+                        onClick={() => loadDocumentItem(doc)}
+                        className="truncate pr-4 flex-1 cursor-pointer"
+                      >
+                        <p className="font-semibold text-white group-hover:text-sky-300 transition truncate text-sm">
                           {doc.eventName}
                         </p>
                       </div>
-                      <span className="flex-shrink-0 text-xs bg-sky-950 text-sky-400/90 font-mono font-bold px-2 py-1 rounded">
-                        {slotsFilled}/20 Registered
-                      </span>
-                    </button>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs bg-sky-950 text-sky-400/90 font-mono font-bold px-2 py-1 rounded">
+                          {slotsFilled}/20 Registered
+                        </span>
+
+                        {isAdmin && (
+                          eventToDeleteId === doc.$id ? (
+                            <div className="flex items-center gap-1 bg-red-955/60 p-0.5 border border-red-500/30 rounded" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] font-bold text-red-200 font-mono px-1">Delete?</span>
+                              <button
+                                onClick={(e) => handleDeleteSavedEvent(doc.$id, e)}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEventToDeleteId(null);
+                                }}
+                                className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] font-bold rounded cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEventToDeleteId(doc.$id);
+                              }}
+                              className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-950/40 rounded transition cursor-pointer"
+                              title="Delete event from collection"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>

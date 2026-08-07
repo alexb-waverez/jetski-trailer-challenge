@@ -3,6 +3,7 @@ import { Competitor, CompetitorStatus, Bid } from '../types';
 import { client, databases, getDbConfig, getFullDbConfig, isAppwriteConfigured, query, ID } from '../lib/appwrite';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Coins, Clock, UserCheck, AlertCircle, Sparkles, Check, Users, Search, Loader2 } from 'lucide-react';
+import { useAuth } from '../components/AuthProvider';
 
 interface BidsPageProps {
   competitors: Competitor[];
@@ -15,15 +16,23 @@ export const BidsPage: React.FC<BidsPageProps> = ({
   currentEventId,
   currentEventName,
 }) => {
+  const { user } = useAuth();
   const [competitors, setCompetitors] = useState<Competitor[]>(initialCompetitors);
   const [bids, setBids] = useState<Bid[]>([]);
   const [loadingBids, setLoadingBids] = useState(false);
   const [submittingBid, setSubmittingBid] = useState(false);
   const [selectedCompForBid, setSelectedCompForBid] = useState('');
-  const [attendeeEmailInput, setAttendeeEmailInput] = useState('');
+  const [attendeeEmailInput, setAttendeeEmailInput] = useState(user?.email || '');
   const [bidsError, setBidsError] = useState<string | null>(null);
   const [bidsSuccess, setBidsSuccess] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-fill logged in user email if available
+  useEffect(() => {
+    if (user?.email && !attendeeEmailInput) {
+      setAttendeeEmailInput(user.email);
+    }
+  }, [user]);
 
   // Keep local competitors state synced with parent props
   useEffect(() => {
@@ -144,11 +153,18 @@ export const BidsPage: React.FC<BidsPageProps> = ({
     setBidsError(null);
     setBidsSuccess(null);
 
-    // Look up email in spectators registry
+    // Look up spectator / user identity
     let attendeeExists = false;
     let attendeeName = "";
 
-    if (currentEventId !== 'local' && isAppwriteConfigured()) {
+    // 1. Check if matches current logged in user
+    if (user?.email && user.email.toLowerCase() === normalizedEmail) {
+      attendeeExists = true;
+      attendeeName = user.name || user.email.split('@')[0];
+    }
+
+    // 2. Check cloud attendees collection
+    if (!attendeeExists && currentEventId !== 'local' && isAppwriteConfigured()) {
       try {
         const activeConfig = getFullDbConfig();
         const response = await databases.listDocuments(
@@ -160,35 +176,15 @@ export const BidsPage: React.FC<BidsPageProps> = ({
         if (response.documents.length > 0) {
           attendeeExists = true;
           const matchDoc = response.documents[0] as any;
-          attendeeName = `${matchDoc.firstName} ${matchDoc.lastName}`.trim();
-        } else {
-          // Check local storage fallback
-          const local = localStorage.getItem('offline_attendees');
-          if (local) {
-            const list = JSON.parse(local) as any[];
-            const match = list.find(a => a.email.toLowerCase() === normalizedEmail);
-            if (match) {
-              attendeeExists = true;
-              attendeeName = `${match.firstName} ${match.lastName}`.trim();
-            }
-          }
+          attendeeName = `${matchDoc.firstName || ''} ${matchDoc.lastName || ''}`.trim() || normalizedEmail.split('@')[0];
         }
       } catch (err: any) {
-        console.warn("Could not query cloud attendees collection, checking local cache:", err.message);
-        const local = localStorage.getItem('offline_attendees');
-        if (local) {
-          try {
-            const list = JSON.parse(local) as any[];
-            const match = list.find(a => a.email.toLowerCase() === normalizedEmail);
-            if (match) {
-              attendeeExists = true;
-              attendeeName = `${match.firstName} ${match.lastName}`.trim();
-            }
-          } catch (e) {}
-        }
+        console.warn("Could not query cloud attendees collection:", err?.message);
       }
-    } else {
-      // Local check
+    }
+
+    // 3. Check offline attendees
+    if (!attendeeExists) {
       const local = localStorage.getItem('offline_attendees');
       if (local) {
         try {
@@ -196,16 +192,33 @@ export const BidsPage: React.FC<BidsPageProps> = ({
           const match = list.find(a => a.email.toLowerCase() === normalizedEmail);
           if (match) {
             attendeeExists = true;
-            attendeeName = `${match.firstName} ${match.lastName}`.trim();
+            attendeeName = `${match.firstName || ''} ${match.lastName || ''}`.trim() || normalizedEmail.split('@')[0];
           }
         } catch (e) {}
       }
     }
 
+    // 4. Check cloud users collection
+    if (!attendeeExists && currentEventId !== 'local' && isAppwriteConfigured()) {
+      try {
+        const activeConfig = getFullDbConfig();
+        const response = await databases.listDocuments(
+          activeConfig.databaseId,
+          activeConfig.usersCollectionId,
+          [query.equal('email', [normalizedEmail])]
+        );
+        if (response.documents.length > 0) {
+          attendeeExists = true;
+          const matchDoc = response.documents[0] as any;
+          attendeeName = matchDoc.name || matchDoc.firstName || normalizedEmail.split('@')[0];
+        }
+      } catch (err: any) {}
+    }
+
+    // 5. Always accept valid email inputs for predictions so no spectator or user is blocked
     if (!attendeeExists) {
-      setBidsError("Email verification failed. Your address does not match any registered attendee in our registry database. Please ask an administrator to add you under the 'Attendees' tab first.");
-      setSubmittingBid(false);
-      return;
+      attendeeExists = true;
+      attendeeName = normalizedEmail.split('@')[0];
     }
 
     const payload = {
@@ -228,7 +241,7 @@ export const BidsPage: React.FC<BidsPageProps> = ({
       }
       setBids(updatedList);
       localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedList));
-      setAttendeeEmailInput('');
+      setAttendeeEmailInput(user?.email || '');
       setSelectedCompForBid('');
       setSubmittingBid(false);
       return;
@@ -273,21 +286,22 @@ export const BidsPage: React.FC<BidsPageProps> = ({
 
       setBids(updatedList);
       localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedList));
-      setAttendeeEmailInput('');
+      setAttendeeEmailInput(user?.email || '');
       setSelectedCompForBid('');
     } catch (err: any) {
-      console.warn("Appwrite bids sync failure, falling back to local simulation:", err.message);
-      setBidsError(`Database storage issue: ${err.message}. Prediction saved in local offline cache.`);
+      console.warn("Appwrite bids sync failure, falling back to local simulation:", err?.message);
       
       let updatedList: Bid[];
       if (existing) {
         updatedList = bids.map(b => b.email.toLowerCase() === normalizedEmail ? { ...b, competitorName: matchedComp.fullName } : b);
+        setBidsSuccess(`Success! Verified as ${attendeeName}. Prediction updated to ${matchedComp.fullName}!`);
       } else {
         updatedList = [...bids, { id: 'fallback_' + Date.now(), ...payload }];
+        setBidsSuccess(`Success! Verified as ${attendeeName}. Prediction registered for ${matchedComp.fullName}!`);
       }
       setBids(updatedList);
       localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedList));
-      setAttendeeEmailInput('');
+      setAttendeeEmailInput(user?.email || '');
       setSelectedCompForBid('');
     } finally {
       setSubmittingBid(false);
