@@ -24,11 +24,16 @@ export interface UserProfile {
   role: UserRole;
 }
 
+export type BidStatus = 'Pending' | 'Accepted' | 'Rejected';
+
 export interface Bid {
   id: string;
+  $id?: string;
   email: string;
   competitorName: string;
   eventId: string;
+  approvedByAdmin?: BidStatus;
+  $createdAt?: string;
 }
 
 export interface Attendee {

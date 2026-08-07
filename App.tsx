@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from './components/AuthProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoginPage from './pages/LoginPage';
 import { databases, getDbConfig, isAppwriteConfigured } from './lib/appwrite';
+import jetskiStormBg from './src/assets/images/jetski_storm_bg_1779561776139.png';
 
 const AppContent: React.FC = () => {
   const { user, loading, role } = useAuth();
@@ -268,80 +269,88 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-      <Header />
-      <main className="container mx-auto p-4 md:p-8">
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <HomePage
-                addCompetitor={addCompetitor}
-                deleteCompetitor={deleteCompetitor}
-                competitors={competitors}
-                resetCompetition={resetCompetition}
-                currentEventId={currentEventId}
-                currentEventName={currentEventName}
-                syncStatus={syncStatus}
-                selectEvent={selectEvent}
-                closeEvent={closeEvent}
-                renameActiveEvent={renameActiveEvent}
-              />
-            }
-          />
-          <Route
-            path="/competition"
-            element={
-              role === 'admin' ? (
-                <CompetitionPage competitors={competitors} updateCompetitor={updateCompetitor} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
-          />
-          <Route
-            path="/attendees"
-            element={
-              role === 'admin' ? (
-                <AttendeesPage />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
-          />
-          <Route 
-            path="/results" 
-            element={
-              <ResultsPage 
-                competitors={competitors} 
-                currentEventName={currentEventName}
-                currentEventId={currentEventId}
-                renameActiveEvent={renameActiveEvent}
-              />
-            } 
-          />
-          <Route 
-            path="/leaderboard" 
-            element={
-              <LeaderboardPage 
-                competitors={competitors} 
-                currentEventName={currentEventName}
-                currentEventId={currentEventId}
-              />
-            } 
-          />
-          <Route 
-            path="/bids" 
-            element={
-              <BidsPage 
-                competitors={competitors} 
-                currentEventId={currentEventId}
-                currentEventName={currentEventName}
-              />
-            } 
-          />
-        </Routes>
-      </main>
+    <div 
+      style={{ backgroundImage: `url(${jetskiStormBg})` }}
+      className="min-h-screen w-full bg-cover bg-center bg-no-repeat bg-fixed text-gray-100 font-sans relative overflow-x-hidden"
+    >
+      {/* Dark storm tint overlay */}
+      <div className="fixed inset-0 bg-slate-950/70 backdrop-brightness-[0.80] pointer-events-none z-0" />
+
+      <div className="relative z-10 min-h-screen flex flex-col">
+        <Header />
+        <main className="container mx-auto p-4 md:p-8 flex-1">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  addCompetitor={addCompetitor}
+                  deleteCompetitor={deleteCompetitor}
+                  competitors={competitors}
+                  resetCompetition={resetCompetition}
+                  currentEventId={currentEventId}
+                  currentEventName={currentEventName}
+                  syncStatus={syncStatus}
+                  selectEvent={selectEvent}
+                  closeEvent={closeEvent}
+                  renameActiveEvent={renameActiveEvent}
+                />
+              }
+            />
+            <Route
+              path="/competition"
+              element={
+                role === 'admin' ? (
+                  <CompetitionPage competitors={competitors} updateCompetitor={updateCompetitor} />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route
+              path="/attendees"
+              element={
+                role === 'admin' ? (
+                  <AttendeesPage />
+                ) : (
+                  <Navigate to="/" replace />
+                )
+              }
+            />
+            <Route 
+              path="/results" 
+              element={
+                <ResultsPage 
+                  competitors={competitors} 
+                  currentEventName={currentEventName}
+                  currentEventId={currentEventId}
+                  renameActiveEvent={renameActiveEvent}
+                />
+              } 
+            />
+            <Route 
+              path="/leaderboard" 
+              element={
+                <LeaderboardPage 
+                  competitors={competitors} 
+                  currentEventName={currentEventName}
+                  currentEventId={currentEventId}
+                />
+              } 
+            />
+            <Route 
+              path="/bids" 
+              element={
+                <BidsPage 
+                  competitors={competitors} 
+                  currentEventId={currentEventId}
+                  currentEventName={currentEventName}
+                />
+              } 
+            />
+          </Routes>
+        </main>
+      </div>
     </div>
   );
 };
