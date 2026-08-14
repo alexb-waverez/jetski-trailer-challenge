@@ -56,17 +56,17 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
   };
 
   const getButtonClass = (status: CompetitorStatus) => {
-      if (!isAdmin) return 'bg-gray-850 border border-gray-700 text-gray-500 cursor-not-allowed';
-      switch (status) {
-          case CompetitorStatus.Pending:
-            return 'bg-green-600 hover:bg-green-700';
-          case CompetitorStatus.Running:
-            return 'bg-red-600 hover:bg-red-700';
-          case CompetitorStatus.Finished:
-            return 'bg-gray-500 cursor-not-allowed';
-          default:
-            return 'bg-gray-600 cursor-not-allowed';
-      }
+    if (!isAdmin) return 'bg-black/40 border border-white/10 text-gray-500 font-mono text-xs cursor-not-allowed';
+    switch (status) {
+      case CompetitorStatus.Pending:
+        return 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-orbitron font-bold italic uppercase tracking-wider shadow-[0_0_15px_rgba(16,185,129,0.3)] text-xs cursor-pointer';
+      case CompetitorStatus.Running:
+        return 'bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-orbitron font-black italic uppercase tracking-wider shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse text-xs cursor-pointer';
+      case CompetitorStatus.Finished:
+        return 'bg-black/60 border border-emerald-500/40 text-emerald-300 font-orbitron font-bold italic uppercase tracking-wider text-xs cursor-not-allowed';
+      default:
+        return 'bg-black/40 border border-white/10 text-gray-500 font-mono text-xs cursor-not-allowed';
+    }
   }
 
   const getButtonText = (status: CompetitorStatus) => {
@@ -79,63 +79,109 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
   }
 
   return (
-     <div className="space-y-8 animate-fade-in">
-      <div className="text-center">
-        <h1 className="text-3xl md:text-4xl font-bold text-sky-400 mb-2">Competition Live</h1>
-        <p className="text-lg text-gray-400">Start and stop the timer for each competitor's run.</p>
+    <div className="space-y-8 animate-fade-in pb-12">
+      <div className="text-center space-y-2">
+        <h1 className="font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white text-3xl md:text-4xl drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
+          Competition Live
+        </h1>
+        <p className="text-sm md:text-base text-gray-300 max-w-xl mx-auto font-sans leading-relaxed">
+          Real-time precision timers and penalty points tracking for active course runs.
+        </p>
       </div>
 
       {!isAdmin && (
-        <div className="bg-sky-950/65 border border-sky-505/30 p-4 rounded-xl flex items-start gap-3.5 max-w-2xl mx-auto text-left shadow-lg">
+        <div className="bg-slate-950/70 backdrop-blur-xl border border-cyan-500/30 p-5 rounded-3xl flex items-start gap-3.5 max-w-2xl mx-auto text-left shadow-glass-glow">
           <span className="text-2xl mt-0.5" role="img" aria-label="Lock">🔒</span>
           <div>
-            <span className="text-xs font-bold font-mono text-sky-400 tracking-wider block uppercase">
+            <span className="text-xs font-bold font-mono text-cyan-300 tracking-wider block uppercase">
               Spectator Access (View-Only)
             </span>
-            <p className="text-sm text-gray-300 mt-0.5">
-              You are signed in as a <strong>user</strong> spectator. Modifying course timers, technical penalty tallies, and competitor qualifications requires the <strong>admin</strong> role.
+            <p className="text-xs md:text-sm text-gray-300 mt-1 font-sans leading-relaxed">
+              You are signed in as a <strong className="text-cyan-300">user</strong> spectator. Modifying course timers, technical penalty tallies, and competitor qualifications requires the <strong className="text-cyan-300">admin</strong> role.
             </p>
           </div>
         </div>
       )}
 
-       {competitors.length === 0 ? (
-        <p className="text-center text-gray-400 text-xl mt-10">No competitors registered. Please add them on the Home page.</p>
+      {competitors.length === 0 ? (
+        <div className="bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-12 text-center max-w-md mx-auto my-12 shadow-glass-glow space-y-3">
+          <p className="text-gray-300 font-orbitron font-bold text-lg">No competitors registered</p>
+          <p className="text-xs text-gray-400 font-mono">Please add competitors on the Home page to start runs.</p>
+        </div>
       ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {competitors.map((competitor) => {
+        {competitors.map((competitor, idx) => {
           const isDisqualified = competitor.status === CompetitorStatus.Disqualified;
+          const isRunning = competitor.status === CompetitorStatus.Running;
+          const isFinished = competitor.status === CompetitorStatus.Finished;
+
           return (
-            <div key={competitor.id} className={`bg-gray-800 rounded-lg shadow-xl p-6 flex flex-col justify-between space-y-4 transition-all duration-300 ${isDisqualified ? 'border-2 border-red-500' : 'transform hover:scale-102'}`}>
-              <div>
-                <h3 className="text-xl font-bold text-sky-300 truncate">{competitor.fullName}</h3>
-                <p className="text-gray-400">{competitor.companyName}</p>
+            <div 
+              key={competitor.id} 
+              className={`bg-slate-950/70 backdrop-blur-xl rounded-3xl shadow-glass-glow p-6 md:p-7 border flex flex-col justify-between space-y-5 transition-all duration-300 relative overflow-hidden group ${
+                isDisqualified 
+                  ? 'border-red-500/80 bg-red-955/20 shadow-[0_0_20px_rgba(239,68,68,0.2)]' 
+                  : isRunning
+                  ? 'border-amber-400/80 bg-amber-955/10 shadow-[0_0_20px_rgba(251,191,36,0.25)]'
+                  : isFinished
+                  ? 'border-emerald-500/50 bg-emerald-955/10'
+                  : 'border-white/[0.08] hover:border-cyan-500/30'
+              }`}
+            >
+              {/* Header */}
+              <div className="space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[10px] font-mono font-extrabold text-cyan-300 uppercase px-2.5 py-0.5 bg-black/60 border border-white/10 rounded-lg">
+                    RIDER #{idx + 1}
+                  </span>
+                  <span className={`text-[10px] font-mono font-bold uppercase px-2.5 py-0.5 rounded-lg border ${
+                    isDisqualified
+                      ? 'bg-red-950/80 text-red-300 border-red-500/40'
+                      : isRunning
+                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/40 animate-pulse'
+                      : isFinished
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                      : 'bg-black/60 text-cyan-300 border-white/10'
+                  }`}>
+                    {competitor.status}
+                  </span>
+                </div>
+                <h3 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white truncate pt-1 group-hover:text-cyan-300 transition-colors">
+                  {competitor.fullName}
+                </h3>
+                <p className="text-xs text-gray-400 font-mono uppercase truncate">{competitor.companyName}</p>
               </div>
 
-              <div className="flex items-center justify-center space-x-4">
-                <span className="text-xs text-gray-400 font-bold font-mono tracking-wider">COURSE PENALTIES</span>
+              {/* Course Penalties Box */}
+              <div className="bg-black/50 border border-white/10 rounded-2xl p-3 flex items-center justify-between">
+                <span className="text-[10px] text-gray-400 font-bold font-mono tracking-wider uppercase">
+                  COURSE PENALTIES
+                </span>
                 <div className="flex items-center space-x-2">
-                    <button
-                        onClick={() => handlePenaltyChange(competitor, -1)}
-                        className="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-650 text-lg font-bold transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-white"
-                        aria-label="Decrease penalty points"
-                        disabled={competitor.penaltyPoints === 0 || isDisqualified || !isAdmin}
-                    >
-                        -
-                    </button>
-                    <span className="font-mono text-xl w-10 text-center text-orange-400 font-bold">{competitor.penaltyPoints}</span>
-                    <button
-                        onClick={() => handlePenaltyChange(competitor, 1)}
-                        className="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-650 text-lg font-bold transition flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-white"
-                        aria-label="Increase penalty points"
-                        disabled={isDisqualified || !isAdmin}
-                    >
-                        +
-                    </button>
+                  <button
+                    onClick={() => handlePenaltyChange(competitor, -1)}
+                    className="w-8 h-8 rounded-xl bg-black/60 hover:bg-white/10 border border-white/10 hover:border-cyan-400 text-lg font-bold transition flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-white"
+                    aria-label="Decrease penalty points"
+                    disabled={competitor.penaltyPoints === 0 || isDisqualified || !isAdmin}
+                  >
+                    -
+                  </button>
+                  <span className="font-mono text-xl w-8 text-center text-amber-400 font-black">
+                    {competitor.penaltyPoints}
+                  </span>
+                  <button
+                    onClick={() => handlePenaltyChange(competitor, 1)}
+                    className="w-8 h-8 rounded-xl bg-black/60 hover:bg-white/10 border border-white/10 hover:border-cyan-400 text-lg font-bold transition flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-white"
+                    aria-label="Increase penalty points"
+                    disabled={isDisqualified || !isAdmin}
+                  >
+                    +
+                  </button>
                 </div>
               </div>
 
-              <div className="text-center h-8 flex items-center justify-center">
+              {/* Digital Timer Screen */}
+              <div className="bg-black/80 border border-cyan-500/30 rounded-2xl py-3 px-4 text-center shadow-[inset_0_2px_8px_rgba(0,0,0,0.8),0_0_15px_rgba(34,211,238,0.15)] flex items-center justify-center min-h-[58px]">
                 <Timer 
                   status={competitor.status} 
                   startTime={competitor.startTime} 
@@ -144,24 +190,31 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
                 />
               </div>
               
-              <div className="mt-auto pt-2 space-y-2">
+              {/* Controls */}
+              <div className="mt-auto pt-1 space-y-2.5">
                 <button
                   onClick={() => handleTimerToggle(competitor)}
                   disabled={competitor.status === CompetitorStatus.Finished || isDisqualified || !isAdmin}
-                  className={`w-full py-2.5 px-4 text-white font-bold rounded-md transition duration-300 ${isDisqualified ? 'bg-gray-700/50 cursor-not-allowed' : getButtonClass(competitor.status)}`}
+                  className={`w-full py-3 px-4 rounded-xl transition duration-300 ${
+                    isDisqualified 
+                      ? 'bg-black/40 border border-white/10 text-gray-500 font-mono text-xs cursor-not-allowed' 
+                      : getButtonClass(competitor.status)
+                  }`}
                 >
                   {getButtonText(competitor.status)}
                 </button>
                 <div className="text-center h-5 flex items-center justify-center">
                     {isAdmin ? (
-                        <button
-                            onClick={() => handleDqToggle(competitor)}
-                            className={`text-xs font-semibold uppercase tracking-wider ${isDisqualified ? 'text-green-400 hover:text-green-300' : 'text-red-400 hover:text-red-300'}`}
-                        >
-                            {isDisqualified ? 'Reinstate Competitor' : 'Disqualify'}
-                        </button>
+                      <button
+                        onClick={() => handleDqToggle(competitor)}
+                        className={`text-[11px] font-mono font-bold uppercase tracking-wider transition ${
+                          isDisqualified ? 'text-emerald-400 hover:text-emerald-300' : 'text-red-400 hover:text-red-300'
+                        }`}
+                      >
+                        {isDisqualified ? '✓ Reinstate Competitor' : '⚠ Disqualify Competitor'}
+                      </button>
                     ) : (
-                        <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Grading Disabled</span>
+                      <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Grading Disabled</span>
                     )}
                 </div>
               </div>

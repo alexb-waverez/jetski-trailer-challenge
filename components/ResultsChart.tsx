@@ -38,16 +38,18 @@ const ResultsChart: React.FC<ResultsChartProps> = ({ data }) => {
           {
             label: 'Run Time (s)',
             data: runTimes,
-            backgroundColor: 'rgba(59, 130, 246, 0.7)', // blue-500
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
+            backgroundColor: 'rgba(34, 211, 238, 0.75)', // cyan-400
+            borderColor: 'rgba(34, 211, 238, 1)',
+            borderWidth: 1.5,
+            borderRadius: 6,
           },
           {
             label: 'Penalty Time (s)',
             data: penaltyTimes,
-            backgroundColor: 'rgba(249, 115, 22, 0.7)', // orange-500
-            borderColor: 'rgba(249, 115, 22, 1)',
-            borderWidth: 1,
+            backgroundColor: 'rgba(251, 191, 36, 0.75)', // amber-400
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1.5,
+            borderRadius: 6,
           },
         ],
       },
@@ -58,14 +60,18 @@ const ResultsChart: React.FC<ResultsChartProps> = ({ data }) => {
             title: {
                 display: true,
                 text: 'Competitor Times Breakdown',
-                color: '#e5e7eb', // gray-200
+                color: '#f3f4f6', // gray-100
                 font: {
-                    size: 18,
+                    size: 16,
+                    weight: 'bold',
                 }
             },
             legend: {
                 labels: {
-                    color: '#d1d5db' // gray-300
+                    color: '#e5e7eb', // gray-200
+                    font: {
+                      weight: 'bold'
+                    }
                 }
             },
             tooltip: {

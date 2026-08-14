@@ -453,15 +453,15 @@ const AttendeesPage: React.FC = () => {
 
   if (role !== 'admin') {
     return (
-      <div className="max-w-md mx-auto my-12 bg-gray-800 border-2 border-red-500/30 rounded-2xl p-8 text-center shadow-2xl">
-        <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4 animate-bounce" />
-        <h2 className="text-2xl font-black text-white tracking-tight">Access Denied</h2>
-        <p className="text-gray-450 mt-3 text-sm leading-relaxed">
+      <div className="max-w-md mx-auto my-12 bg-slate-950/80 backdrop-blur-xl border border-red-500/40 rounded-3xl p-8 text-center shadow-glass-glow space-y-4">
+        <AlertTriangle className="h-16 w-16 text-red-500 mx-auto animate-bounce drop-shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
+        <h2 className="text-2xl font-orbitron font-extrabold italic uppercase tracking-wider text-white">Access Denied</h2>
+        <p className="text-gray-300 text-sm leading-relaxed font-sans">
           The Attendees Directory is reserved exclusively for the tournament admin team to manage registrations and support bidding rosters.
         </p>
         <button
           onClick={() => window.location.hash = '#/'}
-          className="mt-6 px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg text-xs tracking-wider uppercase transition cursor-pointer"
+          className="mt-4 px-6 py-3 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-orbitron font-bold italic uppercase tracking-wider rounded-xl text-xs transition cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.3)]"
         >
           Return to Arena
         </button>
@@ -472,26 +472,26 @@ const AttendeesPage: React.FC = () => {
   return (
     <div className="space-y-8 animate-fade-in relative pb-16">
       {/* Page Title Block */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between items-center text-center md:text-left border-b border-gray-800 pb-6 gap-4">
+      <div className="flex flex-col md:flex-row md:items-end justify-between items-center text-center md:text-left border-b border-white/10 pb-6 gap-4">
         <div>
-          <div className="flex items-center gap-2 justify-center md:justify-start mb-1.5">
+          <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
             {isCloudMode ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold leading-none bg-sky-500/15 text-sky-400 border border-sky-500/25 shadow-md shadow-sky-500/10">
-                <CloudLightning className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-cyan-950/60 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]">
+                <CloudLightning className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                 <span>APPWRITE ACTIVE</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold leading-none bg-amber-500/15 text-amber-400 border border-amber-500/25">
-                <Database className="w-3.5 h-3.5 text-amber-500" />
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-amber-950/60 text-amber-300 border border-amber-500/40">
+                <Database className="w-3.5 h-3.5 text-amber-400" />
                 <span>OFFLINE STORAGE</span>
               </span>
             )}
-            <span className="text-xs text-gray-450 font-bold font-mono uppercase tracking-widest pl-2">
+            <span className="text-xs text-gray-400 font-bold font-mono uppercase tracking-widest pl-2">
               ADMINISTRATION DIRECTORY
             </span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight flex items-center gap-2 justify-center md:justify-start">
-            <Users className="h-8 w-8 text-sky-400" />
+          <h1 className="text-3xl md:text-4xl font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white flex items-center gap-3 justify-center md:justify-start drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
+            <Users className="h-8 w-8 text-cyan-400" />
             Spectator Attendees
           </h1>
           <input
@@ -509,24 +509,24 @@ const AttendeesPage: React.FC = () => {
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`p-4 rounded-xl border flex items-start gap-3 text-sm leading-relaxed shadow-lg ${
+          className={`p-4 rounded-2xl border backdrop-blur-xl flex items-start gap-3 text-sm leading-relaxed shadow-glass-glow ${
             statusMessage.type === 'success' 
-              ? 'bg-emerald-950/20 text-emerald-405 border-emerald-500/30' 
+              ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40' 
               : statusMessage.type === 'error'
-              ? 'bg-red-950/25 text-red-305 border-red-500/30'
-              : 'bg-blue-950/20 text-sky-305 border-sky-500/30'
+              ? 'bg-red-950/60 text-red-300 border-red-500/40'
+              : 'bg-cyan-950/60 text-cyan-300 border-cyan-500/40'
           }`}
         >
           {statusMessage.type === 'success' && <CheckCircle className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />}
-          {statusMessage.type === 'error' && <AlertTriangle className="h-5 w-5 text-red-405 shrink-0 mt-0.5" />}
-          {statusMessage.type === 'info' && <Database className="h-5 w-5 text-sky-450 shrink-0 mt-0.5" />}
+          {statusMessage.type === 'error' && <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />}
+          {statusMessage.type === 'info' && <Database className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />}
           <div className="flex-1">
-            <p className="font-semibold text-white">
+            <p className="font-orbitron font-bold text-white uppercase text-xs tracking-wider">
               {statusMessage.type === 'success' && 'Operation Completed'}
               {statusMessage.type === 'error' && 'System Error'}
               {statusMessage.type === 'info' && 'Appwrite Sync Alert'}
             </p>
-            <p className="mt-0.5 text-xs text-gray-300">{statusMessage.text}</p>
+            <p className="mt-0.5 text-xs text-gray-300 font-sans">{statusMessage.text}</p>
           </div>
           <button onClick={() => setStatusMessage(null)} className="text-gray-400 hover:text-white transition">
             <X className="h-4.5 w-4.5" />
@@ -539,33 +539,33 @@ const AttendeesPage: React.FC = () => {
         <motion.div 
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gray-800 border-2 border-sky-500/40 p-6 rounded-2xl shadow-2xl space-y-4"
+          className="bg-slate-950/90 backdrop-blur-2xl border border-cyan-500/40 p-6 md:p-8 rounded-3xl shadow-glass-glow space-y-5"
         >
-          <div className="flex justify-between items-center border-b border-gray-750 pb-3">
+          <div className="flex justify-between items-center border-b border-white/10 pb-4">
             <div>
-              <h3 className="text-lg font-black text-white flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-sky-400 animate-pulse" /> Confirm CSV Batch Import
+              <h3 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-cyan-400 animate-pulse" /> Confirm CSV Batch Import
               </h3>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-300 mt-1 font-sans">
                 Please verify the resolved attendee roster before initiating DB insertions. Duplicate email addresses in your database will be ignored.
               </p>
             </div>
             <button 
               onClick={() => setPendingCsvRows(null)}
-              className="p-1.5 px-3 bg-gray-700 hover:bg-gray-650 text-gray-300 font-bold rounded-lg text-xs tracking-wider transition cursor-pointer"
+              className="p-2 px-4 bg-black/60 hover:bg-white/10 text-gray-300 font-mono font-bold border border-white/10 rounded-xl text-xs tracking-wider transition cursor-pointer"
             >
               Cancel
             </button>
           </div>
 
-          <div className="max-h-52 overflow-y-auto border border-gray-750 rounded-xl divide-y divide-gray-750/50">
+          <div className="max-h-52 overflow-y-auto border border-white/10 rounded-2xl divide-y divide-white/10 bg-black/40">
             {pendingCsvRows.map((row, idx) => (
-              <div key={idx} className="flex justify-between items-center p-3 text-xs bg-gray-900/10">
+              <div key={idx} className="flex justify-between items-center p-3.5 text-xs">
                 <div>
-                  <span className="font-extrabold text-white text-sm">{row.firstName} {row.lastName}</span>
-                  <span className="text-sky-300 font-mono text-[11px] block mt-0.5">{row.email}</span>
+                  <span className="font-orbitron font-bold text-white text-sm">{row.firstName} {row.lastName}</span>
+                  <span className="text-cyan-300 font-mono text-[11px] block mt-0.5">{row.email}</span>
                 </div>
-                <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-sky-950 text-sky-400 border border-sky-900 rounded uppercase">
+                <span className="text-[9px] font-mono font-bold px-2.5 py-1 bg-cyan-950 text-cyan-300 border border-cyan-500/40 rounded-lg uppercase">
                   Pending Import
                 </span>
               </div>
@@ -576,14 +576,14 @@ const AttendeesPage: React.FC = () => {
             <button
               onClick={() => setPendingCsvRows(null)}
               disabled={importingCsv}
-              className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-650 text-gray-300 font-bold rounded-lg text-xs tracking-wider uppercase transition cursor-pointer"
+              className="flex-1 py-3 bg-black/60 hover:bg-white/10 border border-white/10 text-gray-300 font-mono font-bold rounded-xl text-xs tracking-wider uppercase transition cursor-pointer"
             >
               Discard Batch
             </button>
             <button
               onClick={executeCsvImport}
               disabled={importingCsv}
-              className="flex-[2] py-2.5 bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold rounded-lg text-xs tracking-wider uppercase flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-sky-600/10"
+              className="flex-[2] py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-orbitron font-bold italic uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(34,211,238,0.3)]"
             >
               {importingCsv ? (
                 <>
@@ -601,20 +601,20 @@ const AttendeesPage: React.FC = () => {
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Form: Add / Edit Column */}
-        <div className="lg:col-span-4 bg-gray-800 border border-gray-750 p-6 rounded-2xl shadow-xl flex flex-col self-start space-y-5">
-          <div className="border-b border-gray-700/60 pb-4">
-            <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              <UserPlus className="h-5 w-5 text-sky-400" />
-              {editingId ? 'Edit Attendee Information' : 'Register Attendee Record'}
+        <div className="lg:col-span-4 bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] p-6 md:p-7 rounded-3xl shadow-glass-glow flex flex-col self-start space-y-5">
+          <div className="border-b border-white/10 pb-4">
+            <h3 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-cyan-400" />
+              {editingId ? 'Edit Attendee' : 'Register Attendee'}
             </h3>
-            <p className="text-slate-400 text-xs mt-1">
+            <p className="text-gray-400 text-xs mt-1 font-sans">
               Add attendees who will cast votes and bid on the challenge results.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="input-first-name" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+              <label htmlFor="input-first-name" className="block text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-300 mb-1">
                 First Name
               </label>
               <input
@@ -625,12 +625,12 @@ const AttendeesPage: React.FC = () => {
                 value={firstName}
                 onChange={e => setFirstName(e.target.value)}
                 placeholder="e.g. Maverick"
-                className="w-full px-4 py-2.5 bg-gray-950 border border-gray-750 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm transition-all"
+                className="w-full px-4 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-medium focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 text-sm transition-all"
               />
             </div>
 
             <div>
-              <label htmlFor="input-last-name" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+              <label htmlFor="input-last-name" className="block text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-300 mb-1">
                 Last Name
               </label>
               <input
@@ -641,12 +641,12 @@ const AttendeesPage: React.FC = () => {
                 value={lastName}
                 onChange={e => setLastName(e.target.value)}
                 placeholder="e.g. Mitchell"
-                className="w-full px-4 py-2.5 bg-gray-950 border border-gray-750 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm transition-all"
+                className="w-full px-4 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-medium focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 text-sm transition-all"
               />
             </div>
 
             <div>
-              <label htmlFor="input-email" className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+              <label htmlFor="input-email" className="block text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-300 mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -659,7 +659,7 @@ const AttendeesPage: React.FC = () => {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="name@company.com"
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-950 border border-gray-750 rounded-lg text-white font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-medium focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 text-sm transition-all"
                 />
               </div>
             </div>
@@ -669,7 +669,7 @@ const AttendeesPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={resetFormState}
-                  className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-650 text-gray-300 font-bold rounded-lg text-xs tracking-wider uppercase transition cursor-pointer"
+                  className="flex-1 py-3 bg-black/60 hover:bg-white/10 border border-white/10 text-gray-300 font-mono font-bold rounded-xl text-xs tracking-wider uppercase transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -677,7 +677,7 @@ const AttendeesPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-[2] py-2.5 bg-sky-600 hover:bg-sky-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold rounded-lg text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-sky-600/10"
+                className="flex-[2] py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-orbitron font-bold italic uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-[0_0_15px_rgba(34,211,238,0.3)]"
               >
                 {loading ? (
                   <span className="w-4 h-4 border-2 border-white/35 border-t-white rounded-full animate-spin" />
@@ -692,16 +692,16 @@ const AttendeesPage: React.FC = () => {
         </div>
 
         {/* Right Column: Directory List */}
-        <div className="lg:col-span-8 bg-gray-800 border border-gray-750 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+        <div className="lg:col-span-8 bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] rounded-3xl shadow-glass-glow overflow-hidden flex flex-col">
           {/* Header filters */}
-          <div className="p-6 border-b border-gray-750 bg-gray-850/40 space-y-4">
+          <div className="p-6 border-b border-white/10 bg-black/40 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h3 className="text-xl font-bold font-sans text-white tracking-tight flex items-center gap-2">
+                <h3 className="text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white">
                   Attendee Registry Grid
                 </h3>
                 <p className="text-xs text-gray-400 font-mono mt-0.5">
-                  Total Attendees Registered: <span className="text-sky-305 font-bold">{attendees.length}</span>
+                  Total Attendees Registered: <span className="text-cyan-300 font-bold">{attendees.length}</span>
                 </p>
               </div>
             </div>
@@ -717,19 +717,19 @@ const AttendeesPage: React.FC = () => {
                 if (file) handleCsvFile(file);
               }}
               onClick={() => document.getElementById('csv-file-input')?.click()}
-              className={`p-4 border-2 border-dashed rounded-xl text-center transition-all cursor-pointer ${
+              className={`p-4 border-2 border-dashed rounded-2xl text-center transition-all cursor-pointer ${
                 dragOver 
-                  ? 'border-sky-405 bg-sky-950/20 text-sky-300 scale-[1.01]' 
-                  : 'border-gray-700 bg-gray-900/35 text-gray-400 hover:border-gray-650 hover:bg-gray-900/50'
+                  ? 'border-cyan-400 bg-cyan-950/30 text-cyan-300 scale-[1.01]' 
+                  : 'border-white/10 bg-black/40 text-gray-400 hover:border-cyan-500/40 hover:bg-black/60'
               } flex items-center justify-center gap-3.5 group`}
             >
-              <Upload className={`h-6 w-6 stroke-[2] transition-transform ${dragOver ? 'text-sky-400 -translate-y-0.5' : 'text-gray-500 group-hover:-translate-y-0.5'}`} />
+              <Upload className={`h-6 w-6 stroke-[2] transition-transform ${dragOver ? 'text-cyan-400 -translate-y-0.5' : 'text-gray-400 group-hover:text-cyan-300 group-hover:-translate-y-0.5'}`} />
               <div className="text-left select-none">
                 <p className="text-xs font-bold text-gray-200">
-                  Drag and drop attendees CSV file here, or <span className="text-sky-400 group-hover:underline">browse files</span>
+                  Drag and drop attendees CSV file here, or <span className="text-cyan-400 group-hover:underline">browse files</span>
                 </p>
                 <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
-                  Supported columns: <span className="text-sky-300">firstName</span>, <span className="text-sky-300">lastName</span>, <span className="text-sky-300">email</span>
+                  Supported columns: <span className="text-cyan-300">firstName</span>, <span className="text-cyan-300">lastName</span>, <span className="text-cyan-300">email</span>
                 </p>
               </div>
             </div>
@@ -743,12 +743,12 @@ const AttendeesPage: React.FC = () => {
                 value={searchQuery}
                 aria-label="Search spectator directory"
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-gray-950 border border-gray-750 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-sm transition-colors font-sans"
+                className="w-full pl-11 pr-4 py-3 bg-black/60 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 text-sm transition-colors font-sans"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-3.5 p-0.5 text-gray-400 hover:text-white rounded bg-gray-800 transition"
+                  className="absolute right-3 top-3.5 p-1 text-gray-400 hover:text-white rounded-lg bg-black/60 border border-white/10 transition cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -758,10 +758,10 @@ const AttendeesPage: React.FC = () => {
 
           {/* Directory Grid Table */}
           {filteredAttendees.length === 0 ? (
-            <div className="p-16 text-center text-gray-500 flex flex-col items-center justify-center space-y-3">
-              <Users className="h-14 w-14 text-gray-700" />
-              <p className="text-base font-semibold text-gray-300">No attendees match your search.</p>
-              <p className="text-xs text-gray-405 max-w-sm">
+            <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center space-y-3">
+              <Users className="h-14 w-14 text-gray-600" />
+              <p className="text-base font-orbitron font-bold text-gray-300">No attendees match your search.</p>
+              <p className="text-xs text-gray-400 max-w-sm font-sans leading-relaxed">
                 Add spectators using the registration panel on the left, or seed some mock participants using the sample button.
               </p>
             </div>
@@ -769,14 +769,14 @@ const AttendeesPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-900/50 border-b border-gray-750 text-gray-400 font-bold font-mono text-[10px] uppercase tracking-wider">
+                  <tr className="bg-black/80 border-b border-white/10 text-cyan-300 font-bold font-mono text-[10px] uppercase tracking-wider">
                     <th className="py-4 px-6">Attendee Full Name</th>
                     <th className="py-4 px-6">Email Address</th>
                     <th className="py-4 px-6 text-center w-28">Origin</th>
                     <th className="py-4 px-6 text-right w-32">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-750/30">
+                <tbody className="divide-y divide-white/10">
                   <AnimatePresence initial={false}>
                     {filteredAttendees.map(attendee => {
                       const isOfflineItem = attendee.id.startsWith('local_') || attendee.id === 'demo1' || attendee.id === 'demo2' || attendee.id === 'demo3' || attendee.id === 'demo4' || attendee.id === 'demo5';
@@ -789,50 +789,50 @@ const AttendeesPage: React.FC = () => {
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="hover:bg-gray-750/15 group transition"
+                          className="hover:bg-white/5 group transition border-b border-white/10"
                         >
                           <td className="py-4 px-6">
-                            <span className="font-extrabold text-white text-base">
+                            <span className="font-orbitron font-bold text-white text-base">
                               {attendee.firstName} {attendee.lastName}
                             </span>
                           </td>
                           
                           <td className="py-4 px-6">
-                            <span className="font-mono text-xs text-sky-300 hover:underline">
+                            <span className="font-mono text-xs text-cyan-300 hover:underline">
                               {attendee.email}
                             </span>
                           </td>
 
                           <td className="py-4 px-6 text-center">
                             {isOfflineItem ? (
-                              <span className="inline-flex text-[9px] font-bold font-mono tracking-wide px-1.5 py-0.5 bg-gray-700 text-gray-300 border border-gray-600 rounded">
+                              <span className="inline-flex text-[9px] font-bold font-mono tracking-wide px-2 py-0.5 bg-black/60 text-gray-300 border border-white/10 rounded-lg">
                                 OFFLINE
                               </span>
                             ) : (
-                              <span className="inline-flex text-[9px] font-bold font-mono tracking-wide px-1.5 py-0.5 bg-sky-950 text-sky-400 border border-sky-900 rounded">
+                              <span className="inline-flex text-[9px] font-bold font-mono tracking-wide px-2 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-500/40 rounded-lg">
                                 CLOUD
                               </span>
                             )}
                           </td>
 
                           <td className="py-4 px-6 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
                               {attendeeToDelete === attendee.id ? (
-                                <div className="flex items-center gap-1 bg-red-950/20 p-1 border border-red-500/20 rounded">
+                                <div className="flex items-center gap-1 bg-red-955/40 p-1 border border-red-500/30 rounded-xl">
                                   <button
                                     type="button"
                                     onClick={() => {
                                       handleDelete(attendee.id);
                                       setAttendeeToDelete(null);
                                     }}
-                                    className="px-2.5 py-1 bg-gradient-to-r from-red-650 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-bold text-[10px] rounded transition cursor-pointer"
+                                    className="px-2.5 py-1 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-mono font-bold text-[10px] rounded-lg transition cursor-pointer"
                                   >
                                     Delete
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setAttendeeToDelete(null)}
-                                    className="px-2.5 py-1 bg-gray-750 hover:bg-gray-700 text-gray-300 font-bold text-[10px] rounded transition cursor-pointer"
+                                    className="px-2.5 py-1 bg-black/60 hover:bg-white/10 border border-white/10 text-gray-300 font-mono font-bold text-[10px] rounded-lg transition cursor-pointer"
                                   >
                                     Cancel
                                   </button>
@@ -841,14 +841,14 @@ const AttendeesPage: React.FC = () => {
                                 <>
                                   <button
                                     onClick={() => startEdit(attendee)}
-                                    className="p-2 text-gray-400 hover:text-sky-400 bg-gray-700/30 hover:bg-sky-500/10 border border-transparent hover:border-sky-500/20 rounded-md transition cursor-pointer"
+                                    className="p-2 text-gray-400 hover:text-cyan-300 bg-black/40 hover:bg-white/10 border border-white/10 hover:border-cyan-400/40 rounded-xl transition cursor-pointer"
                                     title="Edit Attendee Record"
                                   >
                                     <Edit2 className="h-3.5 w-3.5" />
                                   </button>
                                   <button
                                     onClick={() => setAttendeeToDelete(attendee.id)}
-                                    className="p-2 text-gray-400 hover:text-red-400 bg-gray-700/30 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-md transition cursor-pointer"
+                                    className="p-2 text-gray-400 hover:text-red-400 bg-black/40 hover:bg-white/10 border border-white/10 hover:border-red-500/40 rounded-xl transition cursor-pointer"
                                     title="Delete Attendee Record"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
