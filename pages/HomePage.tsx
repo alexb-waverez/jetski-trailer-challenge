@@ -32,18 +32,27 @@ import {
   Clock,
   Calendar,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Shuffle,
+  GripVertical,
+  ArrowUpDown,
+  Trophy
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
 interface HomePageProps {
   addCompetitor: (fullName: string, companyName: string) => void;
   deleteCompetitor: (id: string) => void;
+  updateCompetitor?: (id: string, updates: Partial<Competitor>) => void;
+  reorderCompetitors?: (reorderedList: Competitor[]) => void;
   competitors: Competitor[];
   resetCompetition: () => void;
   currentEventId: string | null;
   currentEventName: string | null;
   syncStatus: 'synced' | 'saving' | 'error' | 'local' | null;
+  retrySync?: () => Promise<void>;
   selectEvent: (eventId: string, eventName: string, competitors: Competitor[]) => void;
   closeEvent: () => void;
   renameActiveEvent?: (newName: string) => Promise<void>;
@@ -52,11 +61,14 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ 
   addCompetitor, 
   deleteCompetitor,
+  updateCompetitor,
+  reorderCompetitors,
   competitors, 
   resetCompetition,
   currentEventId,
   currentEventName,
   syncStatus,
+  retrySync,
   selectEvent,
   closeEvent,
   renameActiveEvent
@@ -74,6 +86,17 @@ const HomePage: React.FC<HomePageProps> = ({
   const [competitorToDelete, setCompetitorToDelete] = useState<string | null>(null);
   const [pledgeToDelete, setPledgeToDelete] = useState<string | null>(null);
 
+  // Competitor editing state
+  const [editingCompetitorId, setEditingCompetitorId] = useState<string | null>(null);
+  const [editingFullName, setEditingFullName] = useState('');
+  const [editingCompanyName, setEditingCompanyName] = useState('');
+  const [savingCompetitorEdit, setSavingCompetitorEdit] = useState(false);
+
+  // Competitor sorting and dragging state
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
   const [isEditingActiveName, setIsEditingActiveName] = useState(false);
   const [activeNameInput, setActiveNameInput] = useState(currentEventName || '');
 
@@ -86,6 +109,150 @@ const HomePage: React.FC<HomePageProps> = ({
       await renameActiveEvent(activeNameInput.trim());
       setIsEditingActiveName(false);
     }
+  };
+
+  const startEditingCompetitor = (competitor: Competitor) => {
+    if (!isAdmin) return;
+    setEditingCompetitorId(competitor.id);
+    setEditingFullName(competitor.fullName);
+    setEditingCompanyName(competitor.companyName);
+    setCompetitorToDelete(null);
+  };
+
+  const cancelEditingCompetitor = () => {
+    setEditingCompetitorId(null);
+    setEditingFullName('');
+    setEditingCompanyName('');
+  };
+
+  const handleSaveCompetitorEdit = async (competitorId: string, originalName: string) => {
+    if (!isAdmin) return;
+    const trimmedName = editingFullName.trim();
+    const trimmedCompany = editingCompanyName.trim();
+    
+    if (!trimmedName || !trimmedCompany) {
+      alert("Please provide both competitor full name and affiliated company.");
+      return;
+    }
+
+    setSavingCompetitorEdit(true);
+    try {
+      if (updateCompetitor) {
+        updateCompetitor(competitorId, {
+          fullName: trimmedName,
+          companyName: trimmedCompany,
+        });
+      }
+
+      // If competitor name changed, synchronize existing bids/predictions
+      if (trimmedName !== originalName) {
+        const updatedBids = bids.map(b => 
+          b.competitorName.toLowerCase() === originalName.toLowerCase() 
+            ? { ...b, competitorName: trimmedName } 
+            : b
+        );
+        setBids(updatedBids);
+
+        if (currentEventId) {
+          localStorage.setItem(`bids_${currentEventId}`, JSON.stringify(updatedBids));
+
+          if (currentEventId !== 'local' && isAppwriteConfigured()) {
+            try {
+              const activeConfig = getFullDbConfig();
+              const bidsToUpdate = bids.filter(
+                b => b.competitorName.toLowerCase() === originalName.toLowerCase()
+              );
+              for (const bid of bidsToUpdate) {
+                const docId = bid.$id || bid.id;
+                if (docId) {
+                  await databases.updateDocument(
+                    activeConfig.databaseId,
+                    activeConfig.bidsCollectionId,
+                    docId,
+                    { competitorName: trimmedName }
+                  ).catch((err: any) => console.warn("Failed to update prediction in Appwrite:", err));
+                }
+              }
+            } catch (err) {
+              console.warn("Could not sync predictions update for renamed competitor:", err);
+            }
+          }
+        }
+      }
+
+      cancelEditingCompetitor();
+    } catch (err: any) {
+      console.error("Failed to update competitor details:", err);
+      alert("Failed to update competitor: " + (err.message || err));
+    } finally {
+      setSavingCompetitorEdit(false);
+    }
+  };
+
+  // Alphabetical sort handler (A-Z / Z-A)
+  const handleSortAlphabetical = (forcedDirection?: 'asc' | 'desc') => {
+    if (!isAdmin || competitors.length < 2) return;
+    const nextDir = forcedDirection || (sortDirection === 'asc' ? 'desc' : 'asc');
+    const sorted = [...competitors].sort((a, b) => {
+      const cmp = a.fullName.localeCompare(b.fullName, undefined, { sensitivity: 'base' });
+      return nextDir === 'asc' ? cmp : -cmp;
+    });
+    setSortDirection(nextDir);
+    if (reorderCompetitors) {
+      reorderCompetitors(sorted);
+    }
+  };
+
+  // Random shuffle sort handler
+  const handleRandomShuffle = () => {
+    if (!isAdmin || competitors.length < 2) return;
+    const shuffled = [...competitors];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setSortDirection(null);
+    if (reorderCompetitors) {
+      reorderCompetitors(shuffled);
+    }
+  };
+
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!isAdmin || editingCompetitorId) return;
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (!isAdmin || draggedIdx === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    if (!isAdmin || draggedIdx === null) return;
+    e.preventDefault();
+    if (draggedIdx !== targetIndex) {
+      const updated = [...competitors];
+      const [movedItem] = updated.splice(draggedIdx, 1);
+      updated.splice(targetIndex, 0, movedItem);
+      setSortDirection(null);
+      if (reorderCompetitors) {
+        reorderCompetitors(updated);
+      }
+    }
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
   };
 
   const handleCancelEvent = async () => {
@@ -612,25 +779,31 @@ const HomePage: React.FC<HomePageProps> = ({
     switch (syncStatus) {
       case 'synced':
         return (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold rounded-full">
+          <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold rounded-full shadow-[0_0_10px_rgba(16,185,129,0.15)]">
             <CheckCircle2 className="h-3.5 w-3.5" /> CLOUD SYNCED
           </span>
         );
       case 'saving':
         return (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-sky-950/60 text-sky-450 border border-sky-500/30 text-xs font-mono font-semibold rounded-full">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> SAVING RUN...
+          <span className="flex items-center gap-1.5 px-3 py-1 bg-sky-950/60 text-sky-400 border border-sky-500/30 text-xs font-mono font-semibold rounded-full shadow-[0_0_10px_rgba(56,189,248,0.15)]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" /> SAVING RUN...
           </span>
         );
       case 'error':
         return (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-red-950/60 text-red-400 border border-red-500/30 text-xs font-mono font-semibold rounded-full">
-            <AlertCircle className="h-3.5 w-3.5" /> SYNC ERROR
-          </span>
+          <button
+            type="button"
+            onClick={() => retrySync && retrySync()}
+            className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 hover:bg-red-900/90 text-red-300 hover:text-white border border-red-500/40 text-xs font-mono font-bold rounded-full transition cursor-pointer shadow-[0_0_12px_rgba(239,68,68,0.25)] group"
+            title="Database sync issue. Click to retry connecting to Appwrite."
+          >
+            <RefreshCw className="h-3.5 w-3.5 text-red-400 group-hover:rotate-180 transition-transform duration-500" />
+            <span>SYNC ERROR (CLICK TO RETRY)</span>
+          </button>
         );
       case 'local':
         return (
-          <span className="flex items-center gap-1.5 px-3 py-1 bg-orange-950/60 text-orange-450 border border-orange-500/30 text-xs font-mono font-semibold rounded-full">
+          <span className="flex items-center gap-1.5 px-3 py-1 bg-orange-950/60 text-orange-400 border border-orange-500/30 text-xs font-mono font-semibold rounded-full">
             <Database className="h-3.5 w-3.5" /> LOCAL STORAGE
           </span>
         );
@@ -743,6 +916,38 @@ const HomePage: React.FC<HomePageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Sync Error Advisory Banner */}
+        {syncStatus === 'error' && (
+          <div className="bg-red-950/60 border border-red-500/40 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-red-200 animate-fade-in shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="h-5 w-5 text-red-400 shrink-0 animate-pulse" />
+              <div>
+                <strong className="text-white font-bold block">Cloud Database Synchronization Issue</strong>
+                <span className="text-red-300/90 font-sans">
+                  Changes are currently saved safely in your local browser cache. Click retry or verify your collection IDs in DB Settings.
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => retrySync && retrySync()}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-mono font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Retry Cloud Sync</span>
+              </button>
+              <button
+                type="button"
+                onClick={closeEvent}
+                className="px-3 py-1.5 bg-black/60 hover:bg-white/10 text-gray-300 font-mono text-xs rounded-xl border border-white/10 transition cursor-pointer"
+              >
+                Switch Event
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1.8fr] gap-8">
           
@@ -857,41 +1062,88 @@ const HomePage: React.FC<HomePageProps> = ({
           {/*-- Roster Grid Column --*/}
           <div className="bg-slate-950/70 backdrop-blur-xl rounded-3xl shadow-glass-glow p-6 md:p-8 border border-white/[0.08] flex flex-col justify-between">
             <div>
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
                 <div>
-                  <h2 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white">Registered Roster</h2>
-                  <p className="text-xs text-gray-400 mt-1 font-mono">List of competition candidates</p>
+                  <h2 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-cyan-400" />
+                    <span>Competitive Roster Candidates</span>
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1 font-mono">Registered lineup & starting order positions</p>
                 </div>
                 
-                {isAdmin && (
-                  showCancelEventPrompt ? (
-                    <div className="flex items-center gap-1.5 bg-red-950/80 p-1.5 border border-red-500/40 rounded-xl">
-                      <span className="text-[10px] font-bold text-red-200 uppercase font-mono px-1">Delete Event?</span>
-                      <button 
-                        onClick={handleCancelEvent}
-                        disabled={cancelingEvent}
-                        className="py-1 px-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-black rounded-lg transition cursor-pointer flex items-center gap-1"
+                <div className="flex flex-wrap items-center gap-2">
+                  {isAdmin && competitors.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleSortAlphabetical()}
+                        className="py-1.5 px-2.5 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-mono font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-[0_0_8px_rgba(34,211,238,0.15)]"
+                        title={sortDirection === 'asc' ? "Sort Alphabetically (Z-A)" : "Sort Alphabetically (A-Z)"}
                       >
-                        {cancelingEvent ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                        {sortDirection === 'desc' ? (
+                          <ArrowUpAZ className="h-3.5 w-3.5 text-cyan-400" />
+                        ) : (
+                          <ArrowDownAZ className="h-3.5 w-3.5 text-cyan-400" />
+                        )}
+                        <span>{sortDirection === 'desc' ? 'Sort Z-A' : 'Sort A-Z'}</span>
                       </button>
-                      <button 
-                        onClick={() => setShowCancelEventPrompt(false)}
-                        disabled={cancelingEvent}
-                        className="py-1 px-2 bg-black/60 hover:bg-black/90 text-gray-200 text-xs font-bold rounded-lg transition cursor-pointer"
+
+                      <button
+                        type="button"
+                        onClick={handleRandomShuffle}
+                        className="py-1.5 px-2.5 bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 hover:border-purple-400 text-purple-300 text-xs font-mono font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-[0_0_8px_rgba(168,85,247,0.15)]"
+                        title="Randomize Competitor Starting Positions"
                       >
-                        No
+                        <Shuffle className="h-3.5 w-3.5 text-purple-400" />
+                        <span>Shuffle</span>
                       </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => setShowCancelEventPrompt(true)}
-                      className="py-1.5 px-3 bg-red-950/60 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 text-xs font-mono font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Cancel Event
-                    </button>
-                  )
-                )}
+                    </>
+                  )}
+
+                  {isAdmin && (
+                    showCancelEventPrompt ? (
+                      <div className="flex items-center gap-1.5 bg-red-950/80 p-1.5 border border-red-500/40 rounded-xl">
+                        <span className="text-[10px] font-bold text-red-200 uppercase font-mono px-1">Delete Event?</span>
+                        <button 
+                          onClick={handleCancelEvent}
+                          disabled={cancelingEvent}
+                          className="py-1 px-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-black rounded-lg transition cursor-pointer flex items-center gap-1"
+                        >
+                          {cancelingEvent ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Yes'}
+                        </button>
+                        <button 
+                          onClick={() => setShowCancelEventPrompt(false)}
+                          disabled={cancelingEvent}
+                          className="py-1 px-2 bg-black/60 hover:bg-black/90 text-gray-200 text-xs font-bold rounded-lg transition cursor-pointer"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setShowCancelEventPrompt(true)}
+                        className="py-1.5 px-3 bg-red-950/60 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 text-xs font-mono font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Cancel Event
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
+
+              {isAdmin && competitors.length > 1 && (
+                <div className="mb-3 px-3 py-1.5 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between text-[11px] font-mono text-gray-400">
+                  <span className="flex items-center gap-1.5 text-cyan-300/80">
+                    <GripVertical className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>Drag cards to customize / randomize order</span>
+                  </span>
+                  {sortDirection && (
+                    <span className="text-cyan-400 font-bold uppercase text-[10px]">
+                      Sorted: {sortDirection.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {competitors.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-2xl bg-black/30">
@@ -904,22 +1156,146 @@ const HomePage: React.FC<HomePageProps> = ({
                   <ul className="space-y-3 max-h-[420px] overflow-y-auto pr-2">
                     {competitors.map((c, idx) => {
                       const picksCount = getPicksForCompetitor(c.fullName);
+                      const isEditingThisCompetitor = editingCompetitorId === c.id;
+                      const isBeingDragged = draggedIdx === idx;
+                      const isDragTarget = dragOverIdx === idx && draggedIdx !== idx;
+
+                      if (isEditingThisCompetitor) {
+                        return (
+                          <li 
+                            key={c.id} 
+                            className="bg-cyan-950/40 p-4 sm:p-5 rounded-2xl border border-cyan-400/50 shadow-[0_0_20px_rgba(34,211,238,0.2)] transition duration-300 space-y-3.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-cyan-900/80 text-cyan-300 text-xs font-mono font-extrabold flex items-center justify-center border border-cyan-400/40">
+                                  {idx + 1}
+                                </span>
+                                <span className="text-xs font-mono font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                                  <Edit2 className="h-3.5 w-3.5 text-cyan-400" /> Edit Competitor Roster Entry
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-black/70 text-cyan-300 border border-white/10 rounded-md uppercase font-bold">
+                                {c.status}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold text-gray-300 uppercase tracking-wider mb-1.5">
+                                  Competitor Full Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingFullName}
+                                  onChange={(e) => setEditingFullName(e.target.value)}
+                                  placeholder="e.g. John Doe"
+                                  autoFocus
+                                  disabled={savingCompetitorEdit}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveCompetitorEdit(c.id, c.fullName);
+                                    }
+                                    if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      cancelEditingCompetitor();
+                                    }
+                                  }}
+                                  className="w-full px-3.5 py-2.5 bg-black/80 border border-cyan-400/60 rounded-xl text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-cyan-300 shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold text-gray-300 uppercase tracking-wider mb-1.5">
+                                  Affiliated Company / Marina
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingCompanyName}
+                                  onChange={(e) => setEditingCompanyName(e.target.value)}
+                                  placeholder="e.g. Waverez Marina"
+                                  disabled={savingCompetitorEdit}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveCompetitorEdit(c.id, c.fullName);
+                                    }
+                                    if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      cancelEditingCompetitor();
+                                    }
+                                  }}
+                                  className="w-full px-3.5 py-2.5 bg-black/80 border border-cyan-400/60 rounded-xl text-white text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-cyan-300 shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={cancelEditingCompetitor}
+                                disabled={savingCompetitorEdit}
+                                className="px-3.5 py-1.5 bg-black/60 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-mono font-semibold transition cursor-pointer flex items-center gap-1.5"
+                              >
+                                <X className="h-3.5 w-3.5" /> Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveCompetitorEdit(c.id, c.fullName)}
+                                disabled={savingCompetitorEdit}
+                                className="px-4 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 shadow-[0_0_12px_rgba(34,211,238,0.3)]"
+                              >
+                                {savingCompetitorEdit ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-3.5 w-3.5" /> Save Changes
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      }
+
                       return (
                         <li 
                           key={c.id} 
-                          className="bg-black/40 p-4 rounded-2xl flex justify-between items-center border border-white/10 hover:border-cyan-500/30 transition duration-300"
+                          draggable={isAdmin && !editingCompetitorId}
+                          onDragStart={(e) => handleDragStart(e, idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDrop={(e) => handleDrop(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`p-4 rounded-2xl flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border transition-all duration-200 ${
+                            isBeingDragged 
+                              ? 'opacity-30 border-cyan-400 border-dashed bg-cyan-950/20 scale-[0.98]' 
+                              : isDragTarget 
+                                ? 'border-cyan-400 ring-2 ring-cyan-400/50 bg-cyan-950/60 shadow-[0_0_18px_rgba(34,211,238,0.25)] scale-[1.01]' 
+                                : 'bg-black/40 border-white/10 hover:border-cyan-500/30'
+                          }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="w-7 h-7 rounded-full bg-cyan-950 text-cyan-300 text-xs font-mono font-extrabold flex items-center justify-center border border-cyan-400/30 shadow-[0_0_8px_rgba(34,211,238,0.2)]">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {isAdmin && (
+                              <div 
+                                className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-cyan-300 transition p-1 shrink-0 -ml-1 rounded-lg hover:bg-white/5"
+                                title="Click and drag to reorder / randomize position"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </div>
+                            )}
+                            <span className="w-7 h-7 shrink-0 rounded-full bg-cyan-950 text-cyan-300 text-xs font-mono font-extrabold flex items-center justify-center border border-cyan-400/30 shadow-[0_0_8px_rgba(34,211,238,0.2)]">
                               {idx + 1}
                             </span>
-                            <div>
-                              <p className="font-bold text-white text-base leading-tight">{c.fullName}</p>
-                              <p className="text-gray-400 text-xs mt-0.5">{c.companyName}</p>
+                            <div className="min-w-0">
+                              <p className="font-bold text-white text-base leading-tight truncate">{c.fullName}</p>
+                              <p className="text-gray-400 text-xs mt-0.5 truncate">{c.companyName}</p>
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-3.5 text-right">
+                          <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
                             <div className="space-y-1">
                               <span className="text-[10px] font-mono px-2.5 py-1 bg-black/60 text-cyan-300 border border-white/10 rounded-lg uppercase font-bold block w-fit ml-auto">
                                 {c.status}
@@ -932,36 +1308,47 @@ const HomePage: React.FC<HomePageProps> = ({
                             </div>
 
                             {isAdmin && (
-                              competitorToDelete === c.id ? (
-                                <div className="flex items-center gap-1 bg-red-950/80 p-1 border border-red-500/40 rounded-xl">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      deleteCompetitor(c.id);
-                                      setCompetitorToDelete(null);
-                                    }}
-                                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase rounded-lg transition cursor-pointer"
-                                  >
-                                    Yes
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setCompetitorToDelete(null)}
-                                    className="px-2 py-1 bg-black/60 hover:bg-black/90 text-gray-200 text-[10px] font-bold rounded-lg transition cursor-pointer"
-                                  >
-                                    No
-                                  </button>
-                                </div>
-                              ) : (
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   type="button"
-                                  onClick={() => setCompetitorToDelete(c.id)}
-                                  className="p-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 hover:text-red-200 rounded-xl transition cursor-pointer"
-                                  title="Remove Competitor"
+                                  onClick={() => startEditingCompetitor(c)}
+                                  className="p-1.5 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/30 text-cyan-300 hover:text-cyan-100 rounded-xl transition cursor-pointer"
+                                  title="Edit Competitor Name and Company"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Edit2 className="h-3.5 w-3.5" />
                                 </button>
-                              )
+
+                                {competitorToDelete === c.id ? (
+                                  <div className="flex items-center gap-1 bg-red-950/80 p-1 border border-red-500/40 rounded-xl">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        deleteCompetitor(c.id);
+                                        setCompetitorToDelete(null);
+                                      }}
+                                      className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold uppercase rounded-lg transition cursor-pointer"
+                                    >
+                                      Yes
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCompetitorToDelete(null)}
+                                      className="px-2 py-1 bg-black/60 hover:bg-black/90 text-gray-200 text-[10px] font-bold rounded-lg transition cursor-pointer"
+                                    >
+                                      No
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setCompetitorToDelete(c.id)}
+                                    className="p-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-400 hover:text-red-200 rounded-xl transition cursor-pointer"
+                                    title="Remove Competitor"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </li>

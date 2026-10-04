@@ -96,9 +96,32 @@ const AppContent: React.FC = () => {
         lastSyncedPayloadRef.current = JSON.stringify(parsedCompetitors);
         setSyncStatus('synced');
         setIsActiveEventLoaded(true);
-      } catch (err) {
-        console.error("Failed to recover Appwrite active event, reverting to offline state:", err);
-        setSyncStatus('error');
+      } catch (err: any) {
+        console.error("Failed to recover Appwrite active event:", err);
+        // If document was deleted or does not exist, reset active event pointer cleanly
+        if (
+          err?.code === 404 || 
+          err?.type === 'document_not_found' || 
+          err?.message?.toLowerCase().includes('could not be found') ||
+          err?.message?.toLowerCase().includes('not found')
+        ) {
+          console.warn("Active event document was removed from server. Resetting stored event session.");
+          localStorage.removeItem('appwrite_active_event_id');
+          localStorage.removeItem('appwrite_active_event_name');
+          setCurrentEventId(null);
+          setCurrentEventName(null);
+          currentEventNameRef.current = null;
+          setSyncStatus(null);
+        } else {
+          // General connectivity/auth error: load from local storage cache if available
+          const localComps = localStorage.getItem('offline_competitors');
+          if (localComps) {
+            try {
+              setCompetitors(JSON.parse(localComps));
+            } catch (e) {}
+          }
+          setSyncStatus('error');
+        }
         setIsActiveEventLoaded(true);
       } finally {
         setLoadingActiveEvent(false);
@@ -112,8 +135,10 @@ const AppContent: React.FC = () => {
   const syncCompetitors = async (updatedCompetitors: Competitor[]) => {
     if (!currentEventId) return;
 
+    // Always maintain local offline cache safety
+    localStorage.setItem('offline_competitors', JSON.stringify(updatedCompetitors));
+
     if (currentEventId === 'local') {
-      localStorage.setItem('offline_competitors', JSON.stringify(updatedCompetitors));
       setSyncStatus('local');
       return;
     }
@@ -157,8 +182,19 @@ const AppContent: React.FC = () => {
         
         lastSyncedPayloadRef.current = currentPayload;
         setSyncStatus('synced');
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to synchronize competitor state to Appwrite:", err);
+        if (
+          err?.code === 404 || 
+          err?.type === 'document_not_found' || 
+          err?.message?.toLowerCase().includes('could not be found')
+        ) {
+          localStorage.removeItem('appwrite_active_event_id');
+          localStorage.removeItem('appwrite_active_event_name');
+          setCurrentEventId(null);
+          setCurrentEventName(null);
+          currentEventNameRef.current = null;
+        }
         setSyncStatus('error');
       } finally {
         // Check if a new update occurred during the write
@@ -174,6 +210,16 @@ const AppContent: React.FC = () => {
     };
 
     await executeSync(updatedCompetitors);
+  };
+
+  const retrySync = async () => {
+    if (!currentEventId) return;
+    if (currentEventId === 'local') {
+      setSyncStatus('local');
+      return;
+    }
+    lastSyncedPayloadRef.current = "";
+    await syncCompetitors(competitors);
   };
 
   const addCompetitor = (fullName: string, companyName: string) => {
@@ -208,6 +254,11 @@ const AppContent: React.FC = () => {
     const nextList = competitors.filter(c => c.id !== id);
     setCompetitors(nextList);
     syncCompetitors(nextList);
+  };
+
+  const reorderCompetitors = (reorderedList: Competitor[]) => {
+    setCompetitors(reorderedList);
+    syncCompetitors(reorderedList);
   };
 
   const selectEvent = (eventId: string, eventName: string, eventCompetitors: Competitor[]) => {
@@ -286,11 +337,14 @@ const AppContent: React.FC = () => {
                 <HomePage
                   addCompetitor={addCompetitor}
                   deleteCompetitor={deleteCompetitor}
+                  updateCompetitor={updateCompetitor}
+                  reorderCompetitors={reorderCompetitors}
                   competitors={competitors}
                   resetCompetition={resetCompetition}
                   currentEventId={currentEventId}
                   currentEventName={currentEventName}
                   syncStatus={syncStatus}
+                  retrySync={retrySync}
                   selectEvent={selectEvent}
                   closeEvent={closeEvent}
                   renameActiveEvent={renameActiveEvent}

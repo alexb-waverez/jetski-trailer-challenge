@@ -347,132 +347,142 @@ const Header: React.FC = () => {
 
       {/* Appwrite Settings Portal Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-slate-950/90 border border-white/10 rounded-3xl max-w-lg w-full shadow-glass-glow overflow-hidden transition-all transform scale-100 flex flex-col text-left">
-            <div className="bg-black/40 p-5 border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Database className="h-5 w-5 animate-pulse" />
-                <h3 className="font-orbitron font-extrabold italic uppercase tracking-wider text-white text-base">Appwrite Database Settings</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="bg-slate-950/95 border border-white/10 rounded-3xl max-w-lg w-full shadow-glass-glow flex flex-col text-left my-auto max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-black/50 p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 text-cyan-400">
+                <Database className="h-5 w-5 animate-pulse shrink-0" />
+                <h3 className="font-orbitron font-extrabold italic uppercase tracking-wider text-white text-sm sm:text-base">
+                  Appwrite Database Settings
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-lg transition cursor-pointer"
+                className="text-gray-400 hover:text-white p-1.5 hover:bg-white/10 rounded-xl transition cursor-pointer"
+                title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="p-6 space-y-4">
-              <p className="text-xs text-gray-300 leading-normal font-sans">
-                These settings are stored locally in your browser's <code className="text-cyan-300 font-mono bg-black/60 px-1 py-0.5 rounded">localStorage</code> to override env configurations.
-              </p>
+            {/* Modal Form & Scrollable Body */}
+            <form onSubmit={handleSaveSettings} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 min-h-0">
+                <p className="text-xs text-gray-300 leading-relaxed font-sans bg-black/40 border border-white/5 p-3 rounded-xl">
+                  These settings are stored locally in your browser's <code className="text-cyan-300 font-mono bg-black/60 px-1.5 py-0.5 rounded border border-white/10">localStorage</code> to override system default configurations.
+                </p>
 
-              <div className="space-y-3">
-                {/* Database ID Input */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-300 mb-1">
-                    Appwrite Database ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={dbId}
-                    onChange={(e) => setDbId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                    placeholder="e.g. 6a0f6ada00142e16390e"
-                  />
-                </div>
+                <div className="space-y-3">
+                  {/* Database ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-cyan-300 mb-1">
+                      Appwrite Database ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={dbId}
+                      onChange={(e) => setDbId(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. 6a0f6ada00142e16390e"
+                    />
+                  </div>
 
-                {/* Events Collection ID Input */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-300 mb-1">
-                    Event Registration Collection ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={eventsId}
-                    onChange={(e) => setEventsId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                    placeholder="e.g. events"
-                  />
-                </div>
+                  {/* Events Collection ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-gray-300 mb-1">
+                      Event Registration Collection ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={eventsId}
+                      onChange={(e) => setEventsId(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. events"
+                    />
+                  </div>
 
-                {/* Users Collection ID Input */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-300 mb-1">
-                    User Roles Collection ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={usersId}
-                    onChange={(e) => setUsersId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors font-bold shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                    placeholder="e.g. users"
-                  />
-                </div>
+                  {/* Users Collection ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-gray-300 mb-1">
+                      User Roles Collection ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={usersId}
+                      onChange={(e) => setUsersId(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors font-bold shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. users"
+                    />
+                  </div>
 
-                {/* Bids Collection ID Input */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-300 mb-1">
-                    Support Pledges Collection ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={bidsId}
-                    onChange={(e) => setBidsId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                    placeholder="e.g. bids"
-                  />
-                </div>
+                  {/* Bids Collection ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-gray-300 mb-1">
+                      Support Predictions Collection ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={bidsId}
+                      onChange={(e) => setBidsId(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. bids"
+                    />
+                  </div>
 
-                {/* Attendees Collection ID Input */}
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-widest text-gray-300 mb-1">
-                    Attendees Collection ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={attendeesId}
-                    onChange={(e) => setAttendeesId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-black/60 border border-white/10 rounded-xl text-sky-400 font-mono text-xs font-bold focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                    placeholder="e.g. attendees"
-                  />
+                  {/* Attendees Collection ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-gray-300 mb-1">
+                      Attendees Registry Collection ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={attendeesId}
+                      onChange={(e) => setAttendeesId(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-sky-400 font-mono text-xs font-bold focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. attendees"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3">
+              {/* Modal Footer */}
+              <div className="p-4 sm:px-6 sm:py-4 bg-black/50 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
                 {showResetPrompt ? (
-                  <div className="flex items-center gap-1.5 bg-red-950/60 p-1.5 border border-red-500/40 rounded-xl">
-                    <span className="text-[10px] font-bold text-red-300 font-mono px-1">Reset keys?</span>
-                    <button
-                      type="button"
-                      onClick={handleResetSettings}
-                      className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition cursor-pointer"
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowResetPrompt(false)}
-                      className="px-2 py-1.5 bg-black/60 hover:bg-black/90 text-gray-300 text-xs font-semibold rounded-lg transition cursor-pointer"
-                    >
-                      No
-                    </button>
+                  <div className="flex items-center gap-1.5 bg-red-950/80 p-1.5 border border-red-500/40 rounded-xl w-full sm:w-auto justify-between sm:justify-start">
+                    <span className="text-[10px] font-bold text-red-300 font-mono px-1">Reset config?</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleResetSettings}
+                        className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPrompt(false)}
+                        className="px-2 py-1 bg-black/60 hover:bg-black/90 text-gray-300 text-xs font-semibold rounded-lg transition cursor-pointer"
+                      >
+                        No
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setShowResetPrompt(true)}
-                    className="w-full sm:w-auto px-3 py-2 bg-black/50 hover:bg-red-950/40 hover:text-red-300 rounded-xl border border-white/10 hover:border-red-500/30 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="w-full sm:w-auto px-3 py-2 bg-black/60 hover:bg-red-950/40 hover:text-red-300 rounded-xl border border-white/10 hover:border-red-500/30 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer font-mono"
                     title="Wipe LocalStorage configurations and read .env values directly."
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
-                    <span>Use Sys Defaults (.env)</span>
+                    <span>Use Defaults (.env)</span>
                   </button>
                 )}
 
@@ -480,13 +490,13 @@ const Header: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsSettingsOpen(false)}
-                    className="px-4 py-2 bg-black/40 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-bold tracking-wide uppercase transition cursor-pointer"
+                    className="px-4 py-2 bg-black/40 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-bold font-mono tracking-wide uppercase transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-black font-orbitron italic rounded-xl text-xs tracking-wider uppercase flex items-center gap-1.5 transition cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                    className="px-4 py-2 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-black font-orbitron italic rounded-xl text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 transition cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.3)]"
                   >
                     <Save className="h-3.5 w-3.5" />
                     <span>Save & Reload</span>

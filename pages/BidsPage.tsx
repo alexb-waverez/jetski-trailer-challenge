@@ -4,7 +4,8 @@ import { client, databases, getDbConfig, getFullDbConfig, isAppwriteConfigured, 
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, Coins, Clock, UserCheck, AlertCircle, Sparkles, Check, Users, Search, Loader2,
-  CheckCircle2, XCircle, Trash2, Filter, ThumbsUp, ThumbsDown, RefreshCw, ShieldCheck
+  CheckCircle2, XCircle, Trash2, Filter, ThumbsUp, ThumbsDown, RefreshCw, ShieldCheck,
+  ArrowDownAZ, ArrowUpAZ, ArrowUpDown
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
@@ -32,6 +33,7 @@ export const BidsPage: React.FC<BidsPageProps> = ({
   const [bidsSuccess, setBidsSuccess] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Accepted' | 'Rejected' | 'MY_BIDS'>('ALL');
+  const [candidateSort, setCandidateSort] = useState<'az' | 'za' | 'votes_desc' | 'default'>('az');
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [pledgeToDelete, setPledgeToDelete] = useState<string | null>(null);
 
@@ -477,11 +479,21 @@ export const BidsPage: React.FC<BidsPageProps> = ({
 
   const isCompetitionStarted = competitors.some(c => c.status !== CompetitorStatus.Pending);
 
-  // Search filter
-  const filteredCompetitors = competitors.filter(c => 
-    c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.companyName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Search and Sort filter for Competitive Roster Candidates
+  const filteredCompetitors = [...competitors]
+    .filter(c => 
+      c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      c.companyName.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (candidateSort === 'az') return a.fullName.localeCompare(b.fullName, undefined, { sensitivity: 'base' });
+      if (candidateSort === 'za') return b.fullName.localeCompare(a.fullName, undefined, { sensitivity: 'base' });
+      if (candidateSort === 'votes_desc') {
+        const diff = getBidCount(b.fullName) - getBidCount(a.fullName);
+        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
+      }
+      return 0;
+    });
 
   // Stats summaries
   const totalPredictionsPlaced = bids.length;
@@ -871,7 +883,7 @@ export const BidsPage: React.FC<BidsPageProps> = ({
         {/* Competitors List Grid / Right */}
         <div className="lg:col-span-12 xl:col-span-7 space-y-4">
           <div className="bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] rounded-3xl shadow-glass-glow p-6 md:p-8 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/10 pb-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-white/10 pb-4">
               <div>
                 <h2 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
                   <Trophy className="h-5 w-5 text-amber-400" /> Competitive Roster Candidates
@@ -881,16 +893,52 @@ export const BidsPage: React.FC<BidsPageProps> = ({
                 </p>
               </div>
 
-              {/* Filtering */}
-              <div className="relative max-w-xs w-full">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Filter competitors..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-black/60 border border-white/10 rounded-xl text-xs text-white placeholder-gray-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
-                />
+              {/* Sorting and Search Filtering Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-black/60 p-1 border border-white/10 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setCandidateSort(prev => prev === 'az' ? 'za' : 'az')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1 ${
+                      candidateSort === 'az' || candidateSort === 'za'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_8px_rgba(34,211,238,0.2)]'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                    title={candidateSort === 'az' ? "Sorted Alphabetically (A-Z) - Click for (Z-A)" : "Sorted Alphabetically (Z-A) - Click for (A-Z)"}
+                  >
+                    {candidateSort === 'za' ? (
+                      <ArrowUpAZ className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <ArrowDownAZ className="h-3.5 w-3.5 text-cyan-400" />
+                    )}
+                    <span>{candidateSort === 'za' ? 'Z-A' : 'A-Z'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCandidateSort(prev => prev === 'votes_desc' ? 'az' : 'votes_desc')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1 ${
+                      candidateSort === 'votes_desc'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-[0_0_8px_rgba(251,191,36,0.2)]'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                    title="Sort by Most Backed / Popularity"
+                  >
+                    <Coins className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Votes</span>
+                  </button>
+                </div>
+
+                <div className="relative w-full sm:w-48">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search candidate..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-black/60 border border-white/10 rounded-xl text-xs text-white placeholder-gray-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none transition shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                  />
+                </div>
               </div>
             </div>
 
