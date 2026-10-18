@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
-import { Settings as SettingsIcon, RotateCcw, X, Database, Save, LogOut } from 'lucide-react';
+import { Settings as SettingsIcon, RotateCcw, X, Database, Save, LogOut, LogIn } from 'lucide-react';
 import { getFullDbConfig, saveFullDbConfig } from '../lib/appwrite';
 import glowingWaveLogo from '../src/assets/images/glowing_wave_logo_1779561795140.png';
 
@@ -84,7 +84,7 @@ const Header: React.FC = () => {
   return (
     <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
       <nav className="container mx-auto px-4 md:px-8 py-3.5 flex justify-between items-center">
-        <NavLink to="/" onClick={closeMenu} className="group flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-xl p-1 -ml-1">
+        <NavLink to={user ? "/" : "/leaderboard"} onClick={closeMenu} className="group flex items-center gap-3 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-xl p-1 -ml-1">
             <div className="relative flex items-center justify-center p-0.5 rounded-full bg-cyan-950/30 border border-cyan-400/40 shadow-[0_0_18px_rgba(34,211,238,0.4)] group-hover:scale-105 transition-all">
               <img 
                 src={glowingWaveLogo} 
@@ -117,16 +117,18 @@ const Header: React.FC = () => {
 
         <div className="hidden md:flex items-center space-x-6">
           <ul className="flex space-x-5 text-sm mr-2 items-center font-orbitron font-bold italic uppercase tracking-wider">
-            <li>
-              <NavLink
-                to="/"
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
-              >
-                Home
-              </NavLink>
-            </li>
-            {role === 'admin' && (
+            {user && (
+              <li>
+                <NavLink
+                  to="/"
+                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                  className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
+                >
+                  Home
+                </NavLink>
+              </li>
+            )}
+            {user && role === 'admin' && (
               <>
                 <li>
                   <NavLink
@@ -150,24 +152,6 @@ const Header: React.FC = () => {
             )}
             <li>
               <NavLink
-                to="/results"
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
-              >
-                Results
-              </NavLink>
-            </li>
-            <li>
-              <NavLink
-                to="/bids"
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
-              >
-                Bids
-              </NavLink>
-            </li>
-            <li>
-              <NavLink
                 to="/leaderboard"
                 style={({ isActive }) => (isActive ? activeLinkStyle : {})}
                 className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1 flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg"
@@ -176,7 +160,27 @@ const Header: React.FC = () => {
                 <span>Leaderboard</span>
               </NavLink>
             </li>
-            {role === 'admin' && (
+            <li>
+              <NavLink
+                to="/results"
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
+              >
+                Past Events Results
+              </NavLink>
+            </li>
+            {user && (
+              <li>
+                <NavLink
+                  to="/bids"
+                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                  className="text-gray-300 hover:text-cyan-400 transition-colors duration-300 pb-1"
+                >
+                  Bids
+                </NavLink>
+              </li>
+            )}
+            {user && role === 'admin' && (
               <li>
                 <button
                   onClick={openSettings}
@@ -190,7 +194,7 @@ const Header: React.FC = () => {
             )}
           </ul>
 
-          {user && (
+          {user ? (
             <div className="flex items-center space-x-3 border-l border-white/10 pl-5 animate-fade-in text-right">
               <div>
                 <div className="flex items-center gap-1.5 justify-end mb-0.5">
@@ -231,6 +235,16 @@ const Header: React.FC = () => {
                 <span>Exit</span>
               </button>
             </div>
+          ) : (
+            <div className="flex items-center space-x-3 border-l border-white/10 pl-5 animate-fade-in">
+              <NavLink
+                to="/login"
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-orbitron font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.35)] hover:shadow-[0_0_22px_rgba(6,182,212,0.55)] flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In / Register</span>
+              </NavLink>
+            </div>
           )}
         </div>
       </nav>
@@ -238,72 +252,76 @@ const Header: React.FC = () => {
       {isMenuOpen && (
         <div className="md:hidden bg-slate-950/95 backdrop-blur-2xl border-t border-white/10">
             <ul className="flex flex-col items-center space-y-3 py-5 font-orbitron font-bold italic uppercase tracking-wider text-sm">
-            <li>
+            {user && (
+              <li>
                 <NavLink
-                to="/"
-                onClick={closeMenu}
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
+                  to="/"
+                  onClick={closeMenu}
+                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                  className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
                 >
-                Home
+                  Home
                 </NavLink>
-            </li>
-            {role === 'admin' && (
+              </li>
+            )}
+            {user && role === 'admin' && (
               <>
                 <li>
-                    <NavLink
+                  <NavLink
                     to="/competition"
                     onClick={closeMenu}
                     style={({ isActive }) => (isActive ? activeLinkStyle : {})}
                     className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
-                    >
+                  >
                     Competition
-                    </NavLink>
+                  </NavLink>
                 </li>
                 <li>
-                    <NavLink
+                  <NavLink
                     to="/attendees"
                     onClick={closeMenu}
                     style={({ isActive }) => (isActive ? activeLinkStyle : {})}
                     className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
-                    >
+                  >
                     Attendees
-                    </NavLink>
+                  </NavLink>
                 </li>
               </>
             )}
             <li>
-                <NavLink
-                to="/results"
-                onClick={closeMenu}
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
-                >
-                Results
-                </NavLink>
-            </li>
-            <li>
-                <NavLink
-                to="/bids"
-                onClick={closeMenu}
-                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
-                className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
-                >
-                Bids
-                </NavLink>
-            </li>
-            <li>
-                <NavLink
+              <NavLink
                 to="/leaderboard"
                 onClick={closeMenu}
                 style={({ isActive }) => (isActive ? activeLinkStyle : {})}
                 className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block flex items-center justify-center gap-1.5"
-                >
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <span>Leaderboard</span>
-                </NavLink>
+              </NavLink>
             </li>
-            {role === 'admin' && (
+            <li>
+              <NavLink
+                to="/results"
+                onClick={closeMenu}
+                style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
+              >
+                Past Events Results
+              </NavLink>
+            </li>
+            {user && (
+              <li>
+                <NavLink
+                  to="/bids"
+                  onClick={closeMenu}
+                  style={({ isActive }) => (isActive ? activeLinkStyle : {})}
+                  className="text-gray-200 hover:text-cyan-400 transition-colors duration-300 pb-1 px-4 py-1.5 block"
+                >
+                  Bids
+                </NavLink>
+              </li>
+            )}
+            {user && role === 'admin' && (
               <li className="w-full px-6 py-1 flex justify-center">
                   <button
                     onClick={() => {
@@ -318,7 +336,7 @@ const Header: React.FC = () => {
               </li>
             )}
 
-            {user && (
+            {user ? (
               <li className="w-full pt-4 border-t border-white/10 flex flex-col items-center gap-2 px-6">
                 <span className="text-[10px] text-cyan-300/80 font-mono tracking-widest uppercase">My Role Status</span>
                 {!isConfigured ? (
@@ -357,6 +375,17 @@ const Header: React.FC = () => {
                   <LogOut className="h-3.5 w-3.5" />
                   <span>Exit Session</span>
                 </button>
+              </li>
+            ) : (
+              <li className="w-full pt-4 border-t border-white/10 flex justify-center px-6">
+                <NavLink
+                  to="/login"
+                  onClick={closeMenu}
+                  className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-orbitron font-bold text-xs uppercase tracking-wider rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.35)] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In / Register</span>
+                </NavLink>
               </li>
             )}
 

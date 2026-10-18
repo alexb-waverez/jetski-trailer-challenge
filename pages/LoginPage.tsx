@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../components/AuthProvider';
 import { 
   AlertCircle, 
@@ -14,6 +15,7 @@ import {
   Clock, 
   Sparkles, 
   ArrowRight, 
+  ArrowLeft,
   Flame, 
   BookOpen, 
   Flag, 
@@ -26,6 +28,7 @@ import glowingWaveLogo from '../src/assets/images/glowing_wave_logo_177956179514
 type LoginTab = 'signin' | 'register' | 'guide';
 
 const LoginPage: React.FC = () => {
+  const navigate = useNavigate();
   const { login, signup, error, setError, isConfigured } = useAuth();
   const [activeTab, setActiveTab] = useState<LoginTab>('signin');
   const [email, setEmail] = useState('');
@@ -48,9 +51,11 @@ const LoginPage: React.FC = () => {
         }
         await signup(email, password, name);
         setSuccess("Account created successfully! Welcome to the Challenge.");
+        setTimeout(() => navigate('/'), 600);
       } else {
         await login(email, password);
         setSuccess("Signed in successfully! Launching timer...");
+        setTimeout(() => navigate('/'), 600);
       }
     } catch (err: any) {
       // Error is caught and surfaced by AuthProvider state
@@ -488,6 +493,24 @@ const LoginPage: React.FC = () => {
 
         </div>
         
+        {/* Back to Public Leaderboard / Results Links */}
+        <div className="flex flex-wrap items-center justify-center gap-3 relative z-10 pt-1">
+          <Link
+            to="/leaderboard"
+            className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-cyan-300 hover:text-white bg-slate-900/80 hover:bg-slate-800/95 px-3.5 py-1.5 rounded-xl border border-white/10 hover:border-cyan-400/50 transition-all cursor-pointer shadow-lg"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-cyan-400" />
+            <span>View Live Leaderboard</span>
+          </Link>
+          <Link
+            to="/results"
+            className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-gray-300 hover:text-white bg-black/50 hover:bg-black/75 px-3.5 py-1.5 rounded-xl border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-lg"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Past Events Results</span>
+          </Link>
+        </div>
+
         {/* Footer info lockup */}
         <p className="text-gray-500 font-mono text-[10px] sm:text-xs tracking-wider select-none relative z-10">
           WAVEREZ PRODUCT • SECURE CLOUD GATEWAY

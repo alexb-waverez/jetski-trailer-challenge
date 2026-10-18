@@ -50,12 +50,37 @@ const AppContent: React.FC = () => {
         return;
       }
 
-      if (!currentEventId) {
+      let activeId = currentEventId;
+      let activeName = currentEventName;
+
+      // If no event ID is stored locally (e.g. public guest on a fresh visit), auto-discover latest event
+      if (!activeId) {
+        try {
+          const config = getDbConfig();
+          const listRes = await databases.listDocuments(
+            config.databaseId,
+            config.collectionId
+          );
+          if (listRes.documents.length > 0) {
+            const latestDoc = listRes.documents[listRes.documents.length - 1];
+            activeId = latestDoc.$id;
+            activeName = latestDoc.eventName || 'Challenge Event';
+            setCurrentEventId(activeId);
+            setCurrentEventName(activeName);
+            localStorage.setItem('appwrite_active_event_id', activeId);
+            localStorage.setItem('appwrite_active_event_name', activeName);
+          }
+        } catch (err) {
+          console.warn("Could not auto-detect active event for guest:", err);
+        }
+      }
+
+      if (!activeId) {
         setIsActiveEventLoaded(true);
         return;
       }
       
-      if (currentEventId === 'local') {
+      if (activeId === 'local') {
         setSyncStatus('local');
         const localComps = localStorage.getItem('offline_competitors');
         if (localComps) {
@@ -75,7 +100,7 @@ const AppContent: React.FC = () => {
         const document = await databases.getDocument(
           config.databaseId,
           config.collectionId,
-          currentEventId
+          activeId
         );
         
         // Parse competitor attributes
@@ -315,10 +340,6 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
-  }
-
   return (
     <div 
       style={{ backgroundImage: `url(${jetskiStormBg})` }}
@@ -331,45 +352,16 @@ const AppContent: React.FC = () => {
         <Header />
         <main className="container mx-auto p-4 md:p-8 flex-1">
           <Routes>
-            <Route
-              path="/"
+            {/* Public Routes - Accessible without login */}
+            <Route 
+              path="/leaderboard" 
               element={
-                <HomePage
-                  addCompetitor={addCompetitor}
-                  deleteCompetitor={deleteCompetitor}
-                  updateCompetitor={updateCompetitor}
-                  reorderCompetitors={reorderCompetitors}
-                  competitors={competitors}
-                  resetCompetition={resetCompetition}
-                  currentEventId={currentEventId}
+                <LeaderboardPage 
+                  competitors={competitors} 
                   currentEventName={currentEventName}
-                  syncStatus={syncStatus}
-                  retrySync={retrySync}
-                  selectEvent={selectEvent}
-                  closeEvent={closeEvent}
-                  renameActiveEvent={renameActiveEvent}
+                  currentEventId={currentEventId}
                 />
-              }
-            />
-            <Route
-              path="/competition"
-              element={
-                role === 'admin' ? (
-                  <CompetitionPage competitors={competitors} updateCompetitor={updateCompetitor} />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
-            />
-            <Route
-              path="/attendees"
-              element={
-                role === 'admin' ? (
-                  <AttendeesPage />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
+              } 
             />
             <Route 
               path="/results" 
@@ -382,26 +374,75 @@ const AppContent: React.FC = () => {
                 />
               } 
             />
-            <Route 
-              path="/leaderboard" 
+            <Route
+              path="/login"
               element={
-                <LeaderboardPage 
-                  competitors={competitors} 
-                  currentEventName={currentEventName}
-                  currentEventId={currentEventId}
-                />
-              } 
+                user ? <Navigate to="/" replace /> : <LoginPage />
+              }
+            />
+
+            {/* Authenticated Routes */}
+            <Route
+              path="/"
+              element={
+                user ? (
+                  <HomePage
+                    addCompetitor={addCompetitor}
+                    deleteCompetitor={deleteCompetitor}
+                    updateCompetitor={updateCompetitor}
+                    reorderCompetitors={reorderCompetitors}
+                    competitors={competitors}
+                    resetCompetition={resetCompetition}
+                    currentEventId={currentEventId}
+                    currentEventName={currentEventName}
+                    syncStatus={syncStatus}
+                    retrySync={retrySync}
+                    selectEvent={selectEvent}
+                    closeEvent={closeEvent}
+                    renameActiveEvent={renameActiveEvent}
+                  />
+                ) : (
+                  <Navigate to="/leaderboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/competition"
+              element={
+                user && role === 'admin' ? (
+                  <CompetitionPage competitors={competitors} updateCompetitor={updateCompetitor} />
+                ) : (
+                  <Navigate to={user ? "/" : "/leaderboard"} replace />
+                )
+              }
+            />
+            <Route
+              path="/attendees"
+              element={
+                user && role === 'admin' ? (
+                  <AttendeesPage />
+                ) : (
+                  <Navigate to={user ? "/" : "/leaderboard"} replace />
+                )
+              }
             />
             <Route 
               path="/bids" 
               element={
-                <BidsPage 
-                  competitors={competitors} 
-                  currentEventId={currentEventId}
-                  currentEventName={currentEventName}
-                />
+                user ? (
+                  <BidsPage 
+                    competitors={competitors} 
+                    currentEventId={currentEventId}
+                    currentEventName={currentEventName}
+                  />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
               } 
             />
+
+            {/* Catch-all route */}
+            <Route path="*" element={<Navigate to="/leaderboard" replace />} />
           </Routes>
         </main>
       </div>
