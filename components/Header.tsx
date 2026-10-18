@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { Settings as SettingsIcon, RotateCcw, X, Database, Save, LogOut } from 'lucide-react';
@@ -19,6 +20,24 @@ const Header: React.FC = () => {
   const [attendeesId, setAttendeesId] = useState('');
 
   const [showResetPrompt, setShowResetPrompt] = useState(false);
+
+  // Close modal on Escape key and lock body scroll
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsSettingsOpen(false);
+      }
+    };
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSettingsOpen]);
 
   const openSettings = () => {
     const config = getFullDbConfig();
@@ -346,16 +365,31 @@ const Header: React.FC = () => {
       )}
 
       {/* Appwrite Settings Portal Modal */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-          <div className="bg-slate-950/95 border border-white/10 rounded-3xl max-w-lg w-full shadow-glass-glow flex flex-col text-left my-auto max-h-[90vh] overflow-hidden">
+      {isSettingsOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsSettingsOpen(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-slate-950/95 border border-white/10 rounded-3xl max-w-lg w-full shadow-glass-glow flex flex-col text-left my-auto max-h-[88vh] overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
-            <div className="bg-black/50 p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div className="bg-black/60 p-4 sm:p-5 border-b border-white/10 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5 text-cyan-400">
                 <Database className="h-5 w-5 animate-pulse shrink-0" />
-                <h3 className="font-orbitron font-extrabold italic uppercase tracking-wider text-white text-sm sm:text-base">
-                  Appwrite Database Settings
-                </h3>
+                <div>
+                  <h3 className="font-orbitron font-extrabold italic uppercase tracking-wider text-white text-sm sm:text-base leading-tight">
+                    Database Settings
+                  </h3>
+                  <span className="text-[10px] text-gray-400 font-mono block mt-0.5">
+                    Appwrite Cloud Endpoint & Collection IDs
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -369,7 +403,7 @@ const Header: React.FC = () => {
 
             {/* Modal Form & Scrollable Body */}
             <form onSubmit={handleSaveSettings} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 min-h-0">
+              <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
                 <p className="text-xs text-gray-300 leading-relaxed font-sans bg-black/40 border border-white/5 p-3 rounded-xl">
                   These settings are stored locally in your browser's <code className="text-cyan-300 font-mono bg-black/60 px-1.5 py-0.5 rounded border border-white/10">localStorage</code> to override system default configurations.
                 </p>
@@ -453,7 +487,7 @@ const Header: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 sm:px-6 sm:py-4 bg-black/50 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
+              <div className="p-4 sm:px-6 sm:py-4 bg-black/60 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
                 {showResetPrompt ? (
                   <div className="flex items-center gap-1.5 bg-red-950/80 p-1.5 border border-red-500/40 rounded-xl w-full sm:w-auto justify-between sm:justify-start">
                     <span className="text-[10px] font-bold text-red-300 font-mono px-1">Reset config?</span>
@@ -505,7 +539,8 @@ const Header: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );
