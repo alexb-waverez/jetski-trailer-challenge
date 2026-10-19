@@ -15,7 +15,6 @@ import {
   ArrowLeft, 
   RefreshCw, 
   Database,
-  Cloud,
   FileText,
   AlertCircle,
   TrendingUp,
@@ -212,22 +211,6 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
         setSelectedEventCompetitors(compList);
     };
 
-    // Fallback: check if local storage offline has competitors saved to check offline historical rankings
-    const handleLoadOfflinePastEvent = () => {
-        const localComps = localStorage.getItem('offline_competitors');
-        if (localComps) {
-            try {
-                const parsed = JSON.parse(localComps);
-                setSelectedEventId('local_offline');
-                setSelectedEventName('Local Offline Run');
-                setSelectedEventCompetitors(parsed);
-                return;
-            } catch (e) {
-                console.error(e);
-            }
-        }
-        alert("No offline rankings registered in local storage yet!");
-    };
 
     // Switch between currently viewing list or historical list
     const activeList = selectedEventCompetitors !== null ? selectedEventCompetitors : competitors;
@@ -310,10 +293,8 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/*-- Left column: rankings & leaderboard chart --*/}
-        <div className="lg:col-span-2 space-y-6">
+      {/*-- Main Block that shows runs --*/}
+      <div className="space-y-6">
           
           {/*-- Banner indicating archive vs live state --*/}
           {isViewingHistorical ? (
@@ -353,7 +334,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
                   Active Live Challenge Leaderboard
                 </span>
                 <p className="text-xs md:text-sm font-medium text-gray-300 font-sans">
-                  Real-time synchronization with active registration table.
+                  Real-time data.
                 </p>
               </div>
             </div>
@@ -366,7 +347,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
               <p className="text-gray-300 text-xs md:text-sm max-w-md mx-auto leading-relaxed font-sans">
                 {isViewingHistorical 
                   ? "This saved event does not contain any finished or disqualified competitor results."
-                  : "Please start the timers and record course penalties for competitors on the Live Competition page first!"}
+                  : "Once the timers are running the data will be displayed here!"}
               </p>
             </div>
           ) : (
@@ -563,158 +544,166 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
           )}
         </div>
 
-        {/*-- Right column: Past Events Archive Browser --*/}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] rounded-3xl shadow-glass-glow p-6 md:p-8 flex flex-col justify-between space-y-5">
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
-                  <History className="h-5 w-5 text-cyan-400" /> Past Events
-                </h2>
-                
-                {isAppwriteConfigured() && (
-                  <button
-                    onClick={fetchPastEvents}
-                    disabled={loadingPast}
-                    className="p-1 px-3 bg-black/60 hover:bg-white/10 border border-white/10 rounded-xl text-xs text-cyan-300 font-mono font-bold flex items-center gap-1.5 transition cursor-pointer"
-                    title="Reload Archives"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${loadingPast ? 'animate-spin' : ''}`} /> Reload
-                  </button>
-                )}
+      {/*-- Past Events Archive Browser Block (Placed under the block that shows runs) --*/}
+      <div className="bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] rounded-3xl shadow-glass-glow p-6 md:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]">
+                <History className="h-5 w-5" />
               </div>
-              <p className="text-xs text-gray-300 leading-relaxed font-sans">
-                Query stored competition leaderboards inside active Appwrite configurations. Click any row to inspect historical winner stats and export reports.
-              </p>
+              <h2 className="text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
+                Past Events
+              </h2>
+              {pastEvents.length > 0 && (
+                <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 border border-cyan-500/30 px-2.5 py-0.5 rounded-full ml-1">
+                  {pastEvents.length} {pastEvents.length === 1 ? 'Archive' : 'Archives'}
+                </span>
+              )}
             </div>
+            <p className="text-xs text-gray-300 leading-relaxed font-sans max-w-2xl">
+              Click any event below to load historical rankings and performance deltas.
+            </p>
+          </div>
 
-            {pastError && (
-              <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-200 flex gap-2">
-                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-                <span>{pastError}</span>
-              </div>
-            )}
+          {isAppwriteConfigured() && (
+            <button
+              onClick={fetchPastEvents}
+              disabled={loadingPast}
+              className="self-start sm:self-center px-4 py-2 bg-black/60 hover:bg-white/10 border border-white/10 hover:border-cyan-400 rounded-xl text-xs text-cyan-300 font-mono font-bold flex items-center gap-2 transition cursor-pointer shrink-0"
+              title="Reload Archives"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingPast ? 'animate-spin' : ''}`} /> Reload Past Events
+            </button>
+          )}
+        </div>
 
-            <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-              {loadingPast ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400 text-xs text-center font-mono">
-                  <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
-                  <span>FETCHING ARCHIVES...</span>
-                </div>
-              ) : !isAppwriteConfigured() ? (
-                <div className="text-center py-6 text-gray-400 space-y-2">
-                  <Database className="h-8 w-8 text-gray-500 mx-auto" />
-                  <p className="text-xs font-semibold font-mono text-gray-300">DATABASE UNCONFIGURED</p>
-                  <p className="text-[11px] text-gray-400 leading-normal max-w-[200px] mx-auto font-sans">
-                    Configure your Appwrite variables inside the homepage drawer to load historic lists.
-                  </p>
-                </div>
-              ) : pastEvents.length === 0 ? (
-                <div className="text-center py-10 text-gray-400 space-y-2">
-                  <Database className="h-8 w-8 text-gray-500 mx-auto" />
-                  <p className="text-xs font-orbitron font-bold text-gray-300">No Stored Challenges</p>
-                  <p className="text-[10px] text-gray-400 font-sans">Create rows on the home screen to build dynamic archives.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {pastEvents.map((doc) => {
-                    let competitorCount = 0;
-                    for (let i = 1; i <= 20; i++) {
-                      if (doc[`competitor${i}`] && doc[`competitor${i}`].trim()) {
-                        competitorCount++;
-                      }
-                    }
+        {pastError && (
+          <div className="p-3.5 bg-red-955/40 border border-red-500/30 rounded-2xl text-xs text-red-200 flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+            <span>{pastError}</span>
+          </div>
+        )}
 
-                    const isSelected = selectedEventId === doc.$id;
+        {loadingPast ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400 text-xs text-center font-mono">
+            <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+            <span>FETCHING ARCHIVES...</span>
+          </div>
+        ) : !isAppwriteConfigured() ? (
+          <div className="text-center py-8 text-gray-400 space-y-2">
+            <Database className="h-8 w-8 text-gray-500 mx-auto" />
+            <p className="text-xs font-semibold font-mono text-gray-300">DATABASE UNCONFIGURED</p>
+            <p className="text-xs text-gray-400 leading-normal max-w-md mx-auto font-sans">
+              Configure your Appwrite variables in the database settings drawer to load and browse historic lists.
+            </p>
+          </div>
+        ) : pastEvents.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 space-y-2">
+            <Database className="h-8 w-8 text-gray-500 mx-auto" />
+            <p className="text-xs font-orbitron font-bold text-gray-300">No Stored Challenges</p>
+            <p className="text-xs text-gray-400 font-sans">Completed runs and events will appear here in the archive.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {pastEvents.map((doc) => {
+              let competitorCount = 0;
+              for (let i = 1; i <= 20; i++) {
+                if (doc[`competitor${i}`] && doc[`competitor${i}`].trim()) {
+                  competitorCount++;
+                }
+              }
 
-                    const isAdmin = role === 'admin';
+              const isSelected = selectedEventId === doc.$id;
+              const isAdmin = role === 'admin';
 
-                    return (
-                      <div 
-                        key={doc.$id} 
-                        className="flex items-center gap-2 w-full"
-                      >
-                        <button
-                          onClick={() => handleLoadPastEvent(doc)}
-                          className={`flex-1 text-left p-3.5 rounded-2xl border flex items-center justify-between group transition duration-150 ${
-                            isSelected 
-                              ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)]' 
-                              : 'bg-black/40 hover:bg-black/60 border-white/10 hover:border-cyan-500/30'
-                          }`}
-                        >
-                          <div className="truncate pr-3">
-                            <p className={`font-orbitron font-bold transition text-xs truncate ${isSelected ? 'text-cyan-300' : 'text-gray-200 group-hover:text-white'}`}>
-                              {doc.eventName}
-                            </p>
-                            {doc.$createdAt && (
-                              <p className="text-[10px] text-gray-400 flex items-center gap-1 font-mono mt-0.5">
-                                <Clock className="h-3 w-3 text-cyan-400 shrink-0" />
-                                <span>Added {formatEventCreatedDate(doc.$createdAt)}</span>
-                              </p>
-                            )}
-                          </div>
-
-                          <span className={`flex-shrink-0 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg border ${isSelected ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40' : 'bg-black/60 text-gray-400 border-white/10'}`}>
-                            {competitorCount} Registered
+              return (
+                <div 
+                  key={doc.$id} 
+                  className={`flex items-stretch gap-2 p-2 rounded-2xl border transition duration-150 ${
+                    isSelected 
+                      ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)]' 
+                      : 'bg-black/40 hover:bg-black/60 border-white/10 hover:border-cyan-500/30'
+                  }`}
+                >
+                  <button
+                    onClick={() => handleLoadPastEvent(doc)}
+                    className="flex-1 text-left p-2.5 flex flex-col justify-between group cursor-pointer min-w-0"
+                  >
+                    <div className="min-w-0 mb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`font-orbitron font-bold transition text-sm truncate ${isSelected ? 'text-cyan-300' : 'text-gray-200 group-hover:text-white'}`}>
+                          {doc.eventName}
+                        </p>
+                        {isSelected && (
+                          <span className="text-[10px] font-mono font-bold tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-md shrink-0">
+                            VIEWING
                           </span>
-                        </button>
+                        )}
+                      </div>
+                      {doc.$createdAt && (
+                        <p className="text-[10px] text-gray-400 flex items-center gap-1 font-mono mt-1">
+                          <Clock className="h-3 w-3 text-cyan-400 shrink-0" />
+                          <span>Added {formatEventCreatedDate(doc.$createdAt)}</span>
+                        </p>
+                      )}
+                    </div>
 
-                        {isAdmin && (
-                          eventToDelete === doc.$id ? (
-                            <div className="flex items-center gap-1.5 bg-red-955/40 p-1 border border-red-500/30 rounded-xl shrink-0">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeletePastEvent(doc.$id);
-                                  setEventToDelete(null);
-                                }}
-                                className="px-2 py-1.5 bg-red-600 hover:bg-red-500 text-white text-[10px] uppercase font-mono font-bold rounded-lg transition cursor-pointer"
-                              >
-                                Yes
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEventToDelete(null);
-                                }}
-                                className="px-2 py-1.5 bg-black/60 hover:bg-white/10 text-gray-200 text-[10px] font-mono font-bold rounded-lg transition cursor-pointer border border-white/10"
-                              >
-                                No
-                              </button>
-                            </div>
-                          ) : (
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] font-mono">
+                      <span className="text-gray-400">Roster:</span>
+                      <span className={`font-bold px-2 py-0.5 rounded border ${isSelected ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40' : 'bg-black/60 text-gray-300 border-white/10'}`}>
+                        {competitorCount} Registered
+                      </span>
+                    </div>
+                  </button>
+
+                  {isAdmin && (
+                    <div className="flex items-center justify-center pl-1 border-l border-white/10 shrink-0">
+                      {eventToDelete === doc.$id ? (
+                        <div className="flex flex-col items-center gap-1 bg-red-955/40 p-1.5 border border-red-500/30 rounded-xl">
+                          <span className="text-[9px] font-mono text-red-300 uppercase">Delete?</span>
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setEventToDelete(doc.$id);
+                                handleDeletePastEvent(doc.$id);
+                                setEventToDelete(null);
                               }}
-                              title="Delete Past Event"
-                              aria-label={`Delete event ${doc.eventName}`}
-                              className="p-3 text-gray-400 hover:text-red-300 bg-black/40 hover:bg-red-955/30 border border-white/10 hover:border-red-500/40 rounded-2xl transition shrink-0 cursor-pointer"
+                              className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] uppercase font-mono font-bold rounded-lg transition cursor-pointer"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              Yes
                             </button>
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEventToDelete(null);
+                              }}
+                              className="px-2 py-1 bg-black/60 hover:bg-white/10 text-gray-200 text-[10px] font-mono font-bold rounded-lg transition cursor-pointer border border-white/10"
+                            >
+                              No
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEventToDelete(doc.$id);
+                          }}
+                          title="Delete Past Event"
+                          aria-label={`Delete event ${doc.eventName}`}
+                          className="p-2 text-gray-400 hover:text-red-300 hover:bg-red-955/30 rounded-xl transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Offline historical check fallback */}
-            <div className="pt-2 border-t border-white/10">
-              <button
-                onClick={handleLoadOfflinePastEvent}
-                className="w-full py-2.5 bg-black/40 hover:bg-black/60 border border-white/10 hover:border-cyan-500/30 text-[11px] font-mono font-bold uppercase tracking-wider text-gray-300 hover:text-white rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-              >
-                <Cloud className="h-3.5 w-3.5 text-cyan-400" /> Browse Local Offline Run
-              </button>
-            </div>
+              );
+            })}
           </div>
-        </div>
-
+        )}
       </div>
     </div>
   );

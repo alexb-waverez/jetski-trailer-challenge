@@ -341,10 +341,12 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div 
-      style={{ backgroundImage: `url(${jetskiStormBg})` }}
-      className="min-h-screen w-full bg-cover bg-center bg-no-repeat bg-fixed text-gray-100 font-sans relative overflow-x-hidden"
-    >
+    <div className="min-h-screen w-full bg-slate-950 text-gray-100 font-sans relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
+      {/* Unified stationary background layer */}
+      <div 
+        style={{ backgroundImage: `url(${jetskiStormBg})` }}
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat pointer-events-none z-0"
+      />
       {/* Dark storm tint overlay */}
       <div className="fixed inset-0 bg-slate-950/70 backdrop-brightness-[0.80] pointer-events-none z-0" />
 

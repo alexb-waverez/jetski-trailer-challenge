@@ -22,7 +22,6 @@ import {
   AlertTriangle, 
   Check 
 } from 'lucide-react';
-import jetskiStormBg from '../src/assets/images/jetski_storm_bg_1779561776139.png';
 import glowingWaveLogo from '../src/assets/images/glowing_wave_logo_1779561795140.png';
 
 type LoginTab = 'signin' | 'register' | 'guide';
@@ -71,13 +70,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div 
-      style={{ backgroundImage: `url(${jetskiStormBg})` }}
-      className="min-h-screen w-full bg-cover bg-center bg-no-repeat flex flex-col items-center justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-y-auto font-sans"
-    >
-      {/* Dark tint overlay to emphasize contrast and readability */}
-      <div className="absolute inset-0 bg-slate-950/45 backdrop-brightness-[0.85] pointer-events-none" />
-
+    <div className="w-full flex flex-col items-center justify-center py-4 sm:py-8 px-2 sm:px-4 font-sans">
       <div className={`w-full relative z-10 flex flex-col items-center space-y-6 transition-all duration-300 ${
         activeTab === 'guide' ? 'max-w-2xl' : 'max-w-md'
       }`}>
@@ -513,7 +506,7 @@ const LoginPage: React.FC = () => {
 
         {/* Footer info lockup */}
         <p className="text-gray-500 font-mono text-[10px] sm:text-xs tracking-wider select-none relative z-10">
-          WAVEREZ PRODUCT • SECURE CLOUD GATEWAY
+          WAVEREZ PRODUCT • Jetski Trailer Parking Competition App
         </p>
       </div>
     </div>
