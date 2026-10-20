@@ -33,6 +33,7 @@ const AppContent: React.FC = () => {
   const pendingSyncRef = useRef<Competitor[] | null>(null);
   const lastSyncedPayloadRef = useRef<string>("");
   const currentEventNameRef = useRef<string | null>(currentEventName);
+  const hasAutoDiscoveredRef = useRef(false);
 
   // Synchronize ref with interactive user changes to prevent stale closure data in the write-stream
   useEffect(() => {
@@ -53,8 +54,10 @@ const AppContent: React.FC = () => {
       let activeId = currentEventId;
       let activeName = currentEventName;
 
-      // If no event ID is stored locally (e.g. public guest on a fresh visit), auto-discover latest event
-      if (!activeId) {
+      // Auto-discover latest event ONLY on fresh initial startup if no event was chosen,
+      // and NOT if the user explicitly clicked "Switch Event" or closed the event.
+      if (!activeId && !hasAutoDiscoveredRef.current && sessionStorage.getItem('event_manually_closed') !== 'true') {
+        hasAutoDiscoveredRef.current = true;
         try {
           const config = getDbConfig();
           const listRes = await databases.listDocuments(
@@ -73,6 +76,8 @@ const AppContent: React.FC = () => {
         } catch (err) {
           console.warn("Could not auto-detect active event for guest:", err);
         }
+      } else {
+        hasAutoDiscoveredRef.current = true;
       }
 
       if (!activeId) {
@@ -295,6 +300,7 @@ const AppContent: React.FC = () => {
     setSyncStatus(eventId === 'local' ? 'local' : 'synced');
     setIsActiveEventLoaded(true);
     
+    sessionStorage.removeItem('event_manually_closed');
     localStorage.setItem('appwrite_active_event_id', eventId);
     localStorage.setItem('appwrite_active_event_name', eventName);
     if (eventId === 'local') {
@@ -303,6 +309,7 @@ const AppContent: React.FC = () => {
   };
 
   const closeEvent = () => {
+    sessionStorage.setItem('event_manually_closed', 'true');
     setCurrentEventId(null);
     setCurrentEventName(null);
     currentEventNameRef.current = null;
@@ -311,6 +318,7 @@ const AppContent: React.FC = () => {
     pendingSyncRef.current = null;
     isSyncingRef.current = false;
     setSyncStatus(null);
+    setIsActiveEventLoaded(true);
     localStorage.removeItem('appwrite_active_event_id');
     localStorage.removeItem('appwrite_active_event_name');
   };

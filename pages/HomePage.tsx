@@ -38,7 +38,8 @@ import {
   Shuffle,
   GripVertical,
   ArrowUpDown,
-  Trophy
+  Trophy,
+  ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
@@ -349,6 +350,9 @@ const HomePage: React.FC<HomePageProps> = ({
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [eventInput, setEventInput] = useState('');
   const [dbError, setDbError] = useState<string | null>(null);
+  const [showNewEventModal, setShowNewEventModal] = useState(false);
+  const [newEventModalName, setNewEventModalName] = useState('');
+  const [showSwitchModal, setShowSwitchModal] = useState(false);
 
   // Bidding Support state
   const [bids, setBids] = useState<Bid[]>([]);
@@ -496,21 +500,20 @@ const HomePage: React.FC<HomePageProps> = ({
     }
   }, [currentEventId, competitors]);
 
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const createCompetitionWithName = async (name: string) => {
     if (!isAdmin) {
-      alert("Only administrators are permitted to start competition events.");
+      alert("Only administrators are permitted to create competition events.");
       return;
     }
-    if (!eventInput.trim()) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    
     setCreatingEvent(true);
     setDbError(null);
     try {
       const activeConfig = getFullDbConfig();
-      const eventName = eventInput.trim();
-      
       const payload: Record<string, any> = {
-        eventName,
+        eventName: trimmed,
       };
 
       // Populate empty values for registration slots competitor1..20
@@ -525,16 +528,24 @@ const HomePage: React.FC<HomePageProps> = ({
         payload
       );
 
-      selectEvent(res.$id, eventName, []);
+      selectEvent(res.$id, trimmed, []);
+      setShowNewEventModal(false);
+      setNewEventModalName('');
+      setEventInput('');
+      fetchEvents();
     } catch (err: any) {
       console.error("Failed to create Appwrite Event:", err);
-      setDbError(
-        err.message || 
-        "Failed to initialize. Check if attributes competitor1 to competitor20 exist as string types in your 'events' table."
-      );
+      const errMsg = err.message || "Failed to initialize competition in database.";
+      setDbError(errMsg);
+      alert("Failed to create competition: " + errMsg);
     } finally {
       setCreatingEvent(false);
     }
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await createCompetitionWithName(eventInput);
   };
 
   const loadDocumentItem = (doc: any) => {
@@ -898,7 +909,21 @@ const HomePage: React.FC<HomePageProps> = ({
 
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewEventModalName('');
+                  setShowNewEventModal(true);
+                }}
+                className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-orbitron font-bold italic uppercase tracking-wider transition rounded-2xl border border-cyan-400/40 text-xs cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.25)]"
+                title="Create another competition without needing to run this one first"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Competition</span>
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={() => navigate('/competition')}
@@ -909,13 +934,301 @@ const HomePage: React.FC<HomePageProps> = ({
               </button>
             )}
             <button
-              onClick={closeEvent}
-              className="px-4 py-2.5 bg-black/60 hover:bg-white/10 text-gray-200 hover:text-white transition rounded-2xl border border-white/10 font-mono font-bold text-xs uppercase tracking-wider cursor-pointer"
+              type="button"
+              onClick={() => {
+                fetchEvents();
+                setShowSwitchModal(true);
+              }}
+              className="px-4 py-2.5 bg-black/60 hover:bg-white/10 text-gray-200 hover:text-white transition rounded-2xl border border-white/10 font-mono font-bold text-xs uppercase tracking-wider cursor-pointer flex items-center gap-1.5"
+              title="Switch to another competition or view all competitions"
             >
-              Switch Event
+              <ArrowUpDown className="h-4 w-4 text-cyan-400" />
+              <span>Switch Event</span>
             </button>
           </div>
         </div>
+
+        {/* Modal: Switch Competition */}
+        {showSwitchModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div 
+              className="bg-slate-950/95 border border-cyan-500/40 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-[0_0_30px_rgba(34,211,238,0.3)] space-y-6 relative max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-cyan-950/60 border border-cyan-400/40 rounded-xl text-cyan-400">
+                      <ArrowUpDown className="h-5 w-5" />
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white">
+                      Switch Competition
+                    </h2>
+                  </div>
+                  <p className="text-xs text-gray-300 font-sans leading-relaxed pt-1">
+                    Select a saved competition to make it active, or return to the competition hub to manage events.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSwitchModal(false)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+                  title="Close dialog"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* List of competitions */}
+              <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[45vh]">
+                {loadingEvents ? (
+                  <div className="py-8 text-center text-gray-400 text-xs font-mono flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+                    <span>Loading saved competitions...</span>
+                  </div>
+                ) : existingEvents.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400 text-xs font-mono">
+                    No competitions found. Create a competition to get started.
+                  </div>
+                ) : (
+                  existingEvents.map((doc) => {
+                    const isCurrent = doc.$id === currentEventId;
+                    let slotsFilled = 0;
+                    let hasStarted = false;
+                    let allFinished = true;
+
+                    for (let i = 1; i <= 20; i++) {
+                      const str = doc[`competitor${i}`];
+                      if (str && str.trim()) {
+                        slotsFilled++;
+                        try {
+                          const parsed = JSON.parse(str);
+                          if (parsed.status !== 'Pending') {
+                            hasStarted = true;
+                          }
+                          if (parsed.status !== 'Finished' && parsed.status !== 'Disqualified') {
+                            allFinished = false;
+                          }
+                        } catch (e) {
+                          allFinished = false;
+                        }
+                      }
+                    }
+                    if (slotsFilled === 0) allFinished = false;
+
+                    return (
+                      <div
+                        key={doc.$id}
+                        className={`p-3.5 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                          isCurrent
+                            ? 'bg-cyan-950/40 border-cyan-400/60 shadow-[0_0_12px_rgba(34,211,238,0.2)]'
+                            : 'bg-black/50 hover:bg-white/5 border-white/10 hover:border-cyan-500/30'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className={`font-orbitron font-bold text-sm truncate ${isCurrent ? 'text-cyan-300' : 'text-white'}`}>
+                              {doc.eventName}
+                            </p>
+                            {isCurrent && (
+                              <span className="text-[9px] font-mono font-bold tracking-wider text-cyan-300 bg-cyan-950 border border-cyan-400/50 px-2 py-0.5 rounded-full shrink-0">
+                                ACTIVE
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {doc.$createdAt && (
+                              <p className="text-[10px] text-gray-400 flex items-center gap-1 font-mono">
+                                <Clock className="h-3 w-3 text-cyan-400 shrink-0" />
+                                <span>{formatEventCreatedDate(doc.$createdAt)}</span>
+                              </p>
+                            )}
+                            {slotsFilled === 0 ? (
+                              <span className="text-[9px] bg-slate-900/80 text-gray-400 font-mono px-1.5 py-0.5 rounded border border-white/10">
+                                Empty
+                              </span>
+                            ) : !hasStarted ? (
+                              <span className="text-[9px] bg-amber-950/60 text-amber-300 font-mono px-1.5 py-0.5 rounded border border-amber-500/30">
+                                Not Run Yet
+                              </span>
+                            ) : !allFinished ? (
+                              <span className="text-[9px] bg-red-950/70 text-red-300 font-mono px-1.5 py-0.5 rounded border border-red-500/40">
+                                In Progress
+                              </span>
+                            ) : (
+                              <span className="text-[9px] bg-emerald-950/60 text-emerald-300 font-mono px-1.5 py-0.5 rounded border border-emerald-500/40">
+                                Completed
+                              </span>
+                            )}
+                            <span className="text-[10px] text-cyan-300/80 font-mono font-bold">
+                              {slotsFilled}/20 racers
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
+                          {isCurrent ? (
+                            <span className="px-3 py-1.5 text-xs font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-400/30 rounded-xl flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Current</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                loadDocumentItem(doc);
+                                setShowSwitchModal(false);
+                              }}
+                              className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.25)]"
+                            >
+                              <span>Switch</span>
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeEvent();
+                    setShowSwitchModal(false);
+                  }}
+                  className="px-3.5 py-2 bg-black/60 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                  title="Deselect active competition and return to event manager hub"
+                >
+                  Deselect / View Event Hub
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSwitchModal(false);
+                        setNewEventModalName('');
+                        setShowNewEventModal(true);
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-orbitron font-bold italic uppercase tracking-wider rounded-xl text-xs transition cursor-pointer flex items-center gap-1.5 shadow-[0_0_12px_rgba(34,211,238,0.25)]"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>+ New Event</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowSwitchModal(false)}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-gray-200 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Add Another Competition */}
+        {showNewEventModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div 
+              className="bg-slate-950/95 border border-cyan-500/40 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-[0_0_30px_rgba(34,211,238,0.3)] space-y-6 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 bg-cyan-950/60 border border-cyan-400/40 rounded-xl text-cyan-400">
+                      <Plus className="h-5 w-5" />
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white">
+                      Add New Competition
+                    </h2>
+                  </div>
+                  <p className="text-xs text-gray-300 font-sans leading-relaxed pt-1">
+                    You can create multiple competitions in advance! Your current competition stays safely saved, and you can switch between them at any time.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNewEventModal(false)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+                  title="Close dialog"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (newEventModalName.trim()) {
+                    await createCompetitionWithName(newEventModalName.trim());
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label htmlFor="modalEventName" className="block text-xs font-mono font-bold uppercase tracking-wider text-cyan-300 mb-2">
+                    Competition Title
+                  </label>
+                  <input
+                    id="modalEventName"
+                    type="text"
+                    value={newEventModalName}
+                    onChange={(e) => setNewEventModalName(e.target.value)}
+                    placeholder="e.g. Heat 2 - Afternoon Run"
+                    autoFocus
+                    className="w-full px-4 py-3 bg-black/70 border border-white/20 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 rounded-xl text-white font-medium placeholder-gray-500 text-sm shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                    required
+                  />
+                </div>
+
+                <div className="p-3 bg-cyan-950/30 border border-cyan-500/20 rounded-xl text-[11px] text-cyan-300/90 font-mono space-y-1">
+                  <p className="flex items-center gap-1.5 font-bold">
+                    <Sparkles className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                    Independent Rosters & Timers
+                  </p>
+                  <p className="text-[10px] text-gray-300 leading-normal font-sans">
+                    Each competition has its own competitor list, spectator predictions, and run times.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewEventModal(false)}
+                    className="px-4 py-2.5 bg-black/60 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl border border-white/10 text-xs font-mono font-bold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creatingEvent || !newEventModalName.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 text-white font-orbitron font-bold italic uppercase tracking-wider rounded-xl text-xs transition cursor-pointer shadow-[0_0_15px_rgba(34,211,238,0.3)] flex items-center gap-2"
+                  >
+                    {creatingEvent ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        <span>Create & Open</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Sync Error Advisory Banner */}
         {syncStatus === 'error' && (
@@ -1619,10 +1932,10 @@ const HomePage: React.FC<HomePageProps> = ({
           <div className="bg-slate-950/70 backdrop-blur-xl rounded-3xl shadow-glass-glow p-6 md:p-8 border border-white/[0.08] flex flex-col justify-between space-y-6 text-left">
             <div className="space-y-2">
               <h2 className="text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white flex items-center gap-2">
-                <Plus className="h-6 w-6 text-cyan-400" /> Start Competition Event
+                <Plus className="h-6 w-6 text-cyan-400" /> Create New Competition
               </h2>
               <p className="text-xs text-gray-300 leading-relaxed font-sans">
-                Create a fresh competition registry line. You'll specify the title first, then you can instantly populate individual competitor names.
+                You can create multiple competitions in advance before any have been run! Competitions remain saved and can be prepared, rostered, and run in any order.
               </p>
             </div>
 
@@ -1650,17 +1963,17 @@ const HomePage: React.FC<HomePageProps> = ({
                 {creatingEvent ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    Spinning Up Registry...
+                    Creating Competition...
                   </>
                 ) : (
-                  "Initialize Event Fields"
+                  "Create Competition"
                 )}
               </button>
             </form>
 
             <div className="pt-4 border-t border-white/10 text-center">
               <span className="text-xs text-gray-400 font-mono">
-                Database rows contain customized competitor values automatically as you add them.
+                Competitions are stored independently in the database.
               </span>
             </div>
           </div>
@@ -1683,7 +1996,7 @@ const HomePage: React.FC<HomePageProps> = ({
               </button>
             </div>
             <p className="text-xs text-gray-300 font-sans leading-relaxed">
-              Select any existing challenges saved in your Appwrite server collection to continue registration, time runs, and print results.
+              Select any existing competition to register competitors, take predictions, or run course timers.
             </p>
           </div>
 
@@ -1697,16 +2010,33 @@ const HomePage: React.FC<HomePageProps> = ({
               <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
                 <Database className="h-10 w-10 text-gray-500 mb-2" />
                 <p className="text-sm font-orbitron font-bold text-gray-300">No synced events found</p>
-                <p className="text-xs text-gray-500 mt-0.5 font-mono">Use the "Start Competition" card to add one.</p>
+                <p className="text-xs text-gray-500 mt-0.5 font-mono">Use the "Create New Competition" card to add one.</p>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {existingEvents.map((doc) => {
-                  // count filled slots
+                  // Analyze run status
                   let slotsFilled = 0;
+                  let hasStarted = false;
+                  let allFinished = true;
                   for (let i = 1; i <= 20; i++) {
-                    if (doc[`competitor${i}`]) slotsFilled++;
+                    const str = doc[`competitor${i}`];
+                    if (str && str.trim()) {
+                      slotsFilled++;
+                      try {
+                        const parsed = JSON.parse(str);
+                        if (parsed.status !== 'Pending') {
+                          hasStarted = true;
+                        }
+                        if (parsed.status !== 'Finished' && parsed.status !== 'Disqualified') {
+                          allFinished = false;
+                        }
+                      } catch (e) {
+                        allFinished = false;
+                      }
+                    }
                   }
+                  if (slotsFilled === 0) allFinished = false;
                   
                   return (
                     <div
@@ -1729,9 +2059,37 @@ const HomePage: React.FC<HomePageProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {slotsFilled === 0 ? (
+                          <span className="text-[10px] bg-slate-900/80 text-gray-400 font-mono font-semibold px-2 py-0.5 rounded-lg border border-white/10">
+                            No Competitors
+                          </span>
+                        ) : !hasStarted ? (
+                          <span className="text-[10px] bg-amber-950/60 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-amber-500/30">
+                            Not Run Yet
+                          </span>
+                        ) : !allFinished ? (
+                          <span className="text-[10px] bg-red-950/70 text-red-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-red-500/40">
+                            In Progress
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-emerald-950/60 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-emerald-500/40">
+                            Completed
+                          </span>
+                        )}
+
                         <span className="text-xs bg-cyan-950 text-cyan-300 font-mono font-bold px-2.5 py-1 rounded-lg border border-cyan-500/30">
-                          {slotsFilled}/20 Registered
+                          {slotsFilled}/20
                         </span>
+
+                        <button
+                          type="button"
+                          onClick={() => loadDocumentItem(doc)}
+                          className="px-3 py-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.2)]"
+                          title="Open this competition"
+                        >
+                          <span>Select</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
 
                         {isAdmin && (
                           eventToDeleteId === doc.$id ? (
