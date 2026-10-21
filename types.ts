@@ -43,3 +43,28 @@ export interface Attendee {
   email: string;
 }
 
+export type EventCompetitionStatus = 'Onboarding' | 'Running' | 'Finished';
+
+export const computeEventStatus = (
+  explicitStatus?: string | null, 
+  competitorsList?: Competitor[]
+): EventCompetitionStatus => {
+  if (explicitStatus === 'Onboarding' || explicitStatus === 'Running' || explicitStatus === 'Finished') {
+    return explicitStatus;
+  }
+  if (!competitorsList || competitorsList.length === 0) {
+    return 'Onboarding';
+  }
+  const allFinished = competitorsList.length > 0 && competitorsList.every(
+    c => c.status === CompetitorStatus.Finished || c.status === CompetitorStatus.Disqualified
+  );
+  if (allFinished) return 'Finished';
+
+  const hasRunningOrCompleted = competitorsList.some(
+    c => c.status !== CompetitorStatus.Pending
+  );
+  if (hasRunningOrCompleted) return 'Running';
+
+  return 'Onboarding';
+};
+

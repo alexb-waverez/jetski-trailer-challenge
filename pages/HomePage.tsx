@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Competitor, Bid, CompetitorStatus, BidStatus } from '../types';
+import { Competitor, Bid, CompetitorStatus, BidStatus, EventCompetitionStatus, computeEventStatus } from '../types';
 import { 
   databases, 
   ID, 
   isAppwriteConfigured, 
   getFullDbConfig, 
   saveFullDbConfig,
-  query
+  query,
+  isCorsOrNetworkError
 } from '../lib/appwrite';
+import { AppwriteCorsNotice } from '../components/AppwriteCorsNotice';
+import { EventStatusBadge } from '../components/EventStatusBadge';
 import { 
   Database, 
   Plus, 
@@ -39,7 +42,8 @@ import {
   GripVertical,
   ArrowUpDown,
   Trophy,
-  ChevronRight
+  ChevronRight,
+  Flag
 } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 
@@ -52,9 +56,11 @@ interface HomePageProps {
   resetCompetition: () => void;
   currentEventId: string | null;
   currentEventName: string | null;
+  eventStatus?: EventCompetitionStatus;
+  updateEventStatus?: (status: EventCompetitionStatus) => void;
   syncStatus: 'synced' | 'saving' | 'error' | 'local' | null;
   retrySync?: () => Promise<void>;
-  selectEvent: (eventId: string, eventName: string, competitors: Competitor[]) => void;
+  selectEvent: (eventId: string, eventName: string, competitors: Competitor[], status?: EventCompetitionStatus) => void;
   closeEvent: () => void;
   renameActiveEvent?: (newName: string) => Promise<void>;
 }
@@ -68,6 +74,8 @@ const HomePage: React.FC<HomePageProps> = ({
   resetCompetition,
   currentEventId,
   currentEventName,
+  eventStatus = 'Onboarding',
+  updateEventStatus,
   syncStatus,
   retrySync,
   selectEvent,
@@ -350,9 +358,11 @@ const HomePage: React.FC<HomePageProps> = ({
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [eventInput, setEventInput] = useState('');
   const [dbError, setDbError] = useState<string | null>(null);
+  const [isDbCorsError, setIsDbCorsError] = useState(false);
   const [showNewEventModal, setShowNewEventModal] = useState(false);
   const [newEventModalName, setNewEventModalName] = useState('');
   const [showSwitchModal, setShowSwitchModal] = useState(false);
+  const [showHomeFinishConfirm, setShowHomeFinishConfirm] = useState(false);
 
   // Bidding Support state
   const [bids, setBids] = useState<Bid[]>([]);
@@ -375,6 +385,7 @@ const HomePage: React.FC<HomePageProps> = ({
     if (!isAppwriteConfigured()) return;
     setLoadingEvents(true);
     setDbError(null);
+    setIsDbCorsError(false);
     try {
       const activeConfig = getFullDbConfig();
       const response = await databases.listDocuments(
@@ -384,6 +395,8 @@ const HomePage: React.FC<HomePageProps> = ({
       setExistingEvents(response.documents);
     } catch (err: any) {
       console.error("Appwrite fetch error:", err);
+      const isCors = isCorsOrNetworkError(err);
+      setIsDbCorsError(isCors);
       setDbError(err.message || "Failed to load events. Database or Collection may not be configured.");
     } finally {
       setLoadingEvents(false);
@@ -514,6 +527,7 @@ const HomePage: React.FC<HomePageProps> = ({
       const activeConfig = getFullDbConfig();
       const payload: Record<string, any> = {
         eventName: trimmed,
+        status: 'Onboarding',
       };
 
       // Populate empty values for registration slots competitor1..20
@@ -521,14 +535,34 @@ const HomePage: React.FC<HomePageProps> = ({
         payload[`competitor${i}`] = "";
       }
 
-      const res = await databases.createDocument(
-        activeConfig.databaseId,
-        activeConfig.collectionId,
-        ID.unique(),
-        payload
-      );
+      let res: any;
+      try {
+        res = await databases.createDocument(
+          activeConfig.databaseId,
+          activeConfig.collectionId,
+          ID.unique(),
+          payload
+        );
+      } catch (docErr: any) {
+        // If status attribute is not yet created in the Appwrite collection schema, fallback without status
+        if (
+          docErr?.message?.toLowerCase().includes('attribute') ||
+          docErr?.type?.toLowerCase().includes('attribute')
+        ) {
+          const fallback = { ...payload };
+          delete fallback.status;
+          res = await databases.createDocument(
+            activeConfig.databaseId,
+            activeConfig.collectionId,
+            ID.unique(),
+            fallback
+          );
+        } else {
+          throw docErr;
+        }
+      }
 
-      selectEvent(res.$id, trimmed, []);
+      selectEvent(res.$id, trimmed, [], 'Onboarding');
       setShowNewEventModal(false);
       setNewEventModalName('');
       setEventInput('');
@@ -560,7 +594,19 @@ const HomePage: React.FC<HomePageProps> = ({
         }
       }
     }
-    selectEvent(doc.$id, doc.eventName, compList);
+    // Also support fallback if competitors were stored as array or string
+    if (compList.length === 0 && doc.competitors) {
+      if (Array.isArray(doc.competitors)) {
+        compList.push(...doc.competitors);
+      } else if (typeof doc.competitors === 'string') {
+        try {
+          const parsed = JSON.parse(doc.competitors);
+          if (Array.isArray(parsed)) compList.push(...parsed);
+        } catch (e) {}
+      }
+    }
+    const resolvedStatus = computeEventStatus(doc.status, compList);
+    selectEvent(doc.$id, doc.eventName, compList, resolvedStatus);
   };
 
 
@@ -898,12 +944,15 @@ const HomePage: React.FC<HomePageProps> = ({
                     </button>
                   )}
                 </h1>
-                {activeDoc?.$createdAt && (
-                  <p className="text-xs text-cyan-300/80 flex items-center gap-1.5 font-mono mt-2">
-                    <Clock className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                    <span>Added: {formatEventCreatedDate(activeDoc.$createdAt)}</span>
-                  </p>
-                )}
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <EventStatusBadge status={eventStatus || 'Onboarding'} size="md" />
+                  {activeDoc?.$createdAt && (
+                    <p className="text-xs text-cyan-300/80 flex items-center gap-1.5 font-mono">
+                      <Clock className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                      <span>Added: {formatEventCreatedDate(activeDoc.$createdAt)}</span>
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -926,11 +975,43 @@ const HomePage: React.FC<HomePageProps> = ({
             )}
             {isAdmin && (
               <button
-                onClick={() => navigate('/competition')}
+                onClick={() => {
+                  if (eventStatus === 'Onboarding' && updateEventStatus) {
+                    updateEventStatus('Running');
+                  }
+                  navigate('/competition');
+                }}
                 className="px-5 py-2.5 bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-black font-orbitron italic uppercase tracking-wider transition rounded-2xl border border-red-400/40 text-xs sm:text-sm cursor-pointer flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.35)]"
               >
                 <Play className="h-4 w-4 fill-current" />
-                <span>Start Competition</span>
+                <span>
+                  {eventStatus === 'Finished' 
+                    ? 'View Competition Room' 
+                    : eventStatus === 'Running' 
+                    ? 'Live Competition' 
+                    : 'Start Competition'}
+                </span>
+              </button>
+            )}
+            {isAdmin && eventStatus !== 'Finished' && (
+              <button
+                type="button"
+                onClick={() => setShowHomeFinishConfirm(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white font-orbitron font-extrabold italic uppercase tracking-wider transition rounded-2xl border border-emerald-400/40 text-xs sm:text-sm cursor-pointer flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                title="Finish this competition"
+              >
+                <Flag className="h-4 w-4" />
+                <span>Finish</span>
+              </button>
+            )}
+            {isAdmin && eventStatus === 'Finished' && (
+              <button
+                type="button"
+                onClick={() => updateEventStatus && updateEventStatus('Running')}
+                className="px-3.5 py-2.5 bg-black/60 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-2xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                title="Reopen competition to Running"
+              >
+                Reopen
               </button>
             )}
             <button
@@ -986,35 +1067,67 @@ const HomePage: React.FC<HomePageProps> = ({
                     <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
                     <span>Loading saved competitions...</span>
                   </div>
+                ) : dbError ? (
+                  <div className="py-4 space-y-3">
+                    {isDbCorsError ? (
+                      <AppwriteCorsNotice
+                        errorTitle="Could not load competitions"
+                        errorMessage={dbError}
+                        onRetry={fetchEvents}
+                        isRetrying={loadingEvents}
+                      />
+                    ) : (
+                      <div className="p-4 bg-red-955/40 border border-red-500/30 rounded-2xl text-xs text-red-200 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-red-400">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>Could not fetch competitions from database</span>
+                        </div>
+                        <p className="font-mono text-[11px] text-gray-300">{dbError}</p>
+                        <button
+                          type="button"
+                          onClick={fetchEvents}
+                          className="px-3 py-1 bg-red-900/60 hover:bg-red-800 border border-red-500/40 rounded-lg text-[11px] font-bold text-white transition flex items-center gap-1.5 cursor-pointer mt-2"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          <span>Retry</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ) : existingEvents.length === 0 ? (
-                  <div className="py-8 text-center text-gray-400 text-xs font-mono">
-                    No competitions found. Create a competition to get started.
+                  <div className="py-8 text-center text-gray-400 text-xs font-mono space-y-3">
+                    <p>No competitions found in the database.</p>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSwitchModal(false);
+                          setNewEventModalName('');
+                          setShowNewEventModal(true);
+                        }}
+                        className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline text-xs cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Create your first competition</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   existingEvents.map((doc) => {
                     const isCurrent = doc.$id === currentEventId;
                     let slotsFilled = 0;
-                    let hasStarted = false;
-                    let allFinished = true;
+                    const docComps: Competitor[] = [];
 
                     for (let i = 1; i <= 20; i++) {
                       const str = doc[`competitor${i}`];
                       if (str && str.trim()) {
                         slotsFilled++;
                         try {
-                          const parsed = JSON.parse(str);
-                          if (parsed.status !== 'Pending') {
-                            hasStarted = true;
-                          }
-                          if (parsed.status !== 'Finished' && parsed.status !== 'Disqualified') {
-                            allFinished = false;
-                          }
-                        } catch (e) {
-                          allFinished = false;
-                        }
+                          docComps.push(JSON.parse(str));
+                        } catch (e) {}
                       }
                     }
-                    if (slotsFilled === 0) allFinished = false;
+                    const itemStatus = computeEventStatus(doc.status, docComps);
 
                     return (
                       <div
@@ -1026,7 +1139,7 @@ const HomePage: React.FC<HomePageProps> = ({
                         }`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className={`font-orbitron font-bold text-sm truncate ${isCurrent ? 'text-cyan-300' : 'text-white'}`}>
                               {doc.eventName}
                             </p>
@@ -1036,30 +1149,14 @@ const HomePage: React.FC<HomePageProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             {doc.$createdAt && (
                               <p className="text-[10px] text-gray-400 flex items-center gap-1 font-mono">
                                 <Clock className="h-3 w-3 text-cyan-400 shrink-0" />
                                 <span>{formatEventCreatedDate(doc.$createdAt)}</span>
                               </p>
                             )}
-                            {slotsFilled === 0 ? (
-                              <span className="text-[9px] bg-slate-900/80 text-gray-400 font-mono px-1.5 py-0.5 rounded border border-white/10">
-                                Empty
-                              </span>
-                            ) : !hasStarted ? (
-                              <span className="text-[9px] bg-amber-950/60 text-amber-300 font-mono px-1.5 py-0.5 rounded border border-amber-500/30">
-                                Not Run Yet
-                              </span>
-                            ) : !allFinished ? (
-                              <span className="text-[9px] bg-red-950/70 text-red-300 font-mono px-1.5 py-0.5 rounded border border-red-500/40">
-                                In Progress
-                              </span>
-                            ) : (
-                              <span className="text-[9px] bg-emerald-950/60 text-emerald-300 font-mono px-1.5 py-0.5 rounded border border-emerald-500/40">
-                                Completed
-                              </span>
-                            )}
+                            <EventStatusBadge status={itemStatus} size="sm" />
                             <span className="text-[10px] text-cyan-300/80 font-mono font-bold">
                               {slotsFilled}/20 racers
                             </span>
@@ -1128,6 +1225,70 @@ const HomePage: React.FC<HomePageProps> = ({
                     Close
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Confirm Finish Competition from Home */}
+        {showHomeFinishConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div 
+              className="bg-slate-950/95 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-[0_0_30px_rgba(16,185,129,0.3)] space-y-6 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2.5 bg-emerald-950/80 border border-emerald-500/40 rounded-2xl text-emerald-400">
+                    <Flag className="h-6 w-6" />
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white">
+                      Finish Competition
+                    </h3>
+                    <p className="text-xs text-gray-400 font-mono">
+                      {currentEventName || 'Challenge Event'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowHomeFinishConfirm(false)}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-gray-300 font-sans leading-relaxed">
+                <p>
+                  Are you sure you want to finish this competition? This will set the competition status to <strong className="text-emerald-400 font-mono uppercase">Finished</strong>.
+                </p>
+                <p className="text-gray-400 text-[11px]">
+                  All completed times and leaderboard rankings will be recorded as official. You can always reopen it later if needed.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowHomeFinishConfirm(false)}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-gray-300 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (updateEventStatus) {
+                      updateEventStatus('Finished');
+                    }
+                    setShowHomeFinishConfirm(false);
+                  }}
+                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-orbitron font-extrabold italic uppercase tracking-wider rounded-xl text-xs transition cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.35)] border border-emerald-400/40"
+                >
+                  Confirm & Finish
+                </button>
               </div>
             </div>
           </div>
@@ -1253,7 +1414,10 @@ const HomePage: React.FC<HomePageProps> = ({
               </button>
               <button
                 type="button"
-                onClick={closeEvent}
+                onClick={() => {
+                  fetchEvents();
+                  setShowSwitchModal(true);
+                }}
                 className="px-3 py-1.5 bg-black/60 hover:bg-white/10 text-gray-300 font-mono text-xs rounded-xl border border-white/10 transition cursor-pointer"
               >
                 Switch Event
@@ -1865,6 +2029,14 @@ const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {dbError && (
+        isDbCorsError ? (
+          <AppwriteCorsNotice
+            errorTitle="Appwrite Database Connection Blocked"
+            errorMessage={dbError}
+            onRetry={fetchEvents}
+            isRetrying={loadingEvents}
+          />
+        ) : (
         <div className="bg-red-950/80 backdrop-blur-md border border-red-500/50 rounded-3xl p-6 text-red-200 shadow-glass-glow">
           <div className="flex items-start gap-4">
             <AlertCircle className="h-6 w-6 text-red-400 flex-shrink-0 mt-0.5" />
@@ -1888,6 +2060,7 @@ const HomePage: React.FC<HomePageProps> = ({
                     <h5 className="font-bold text-cyan-300 font-mono text-xs">EVENT REGISTRATION COLLECTION: '{config.collectionId}'</h5>
                     <ul className="list-disc pl-5 mt-1 text-xs text-gray-300 space-y-1 font-mono">
                       <li>eventName: String (Required)</li>
+                      <li>status: String, Length: 50 (Optional, default: 'Onboarding' — values: 'Onboarding', 'Running', 'Finished')</li>
                       <li>competitor1 to competitor20: String, Length: 5000 (Optional)</li>
                     </ul>
                   </div>
@@ -1923,6 +2096,7 @@ const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
         </div>
+        )
       )}
 
       <div className={isAdmin ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "max-w-2xl mx-auto"}>
@@ -2015,28 +2189,18 @@ const HomePage: React.FC<HomePageProps> = ({
             ) : (
               <div className="space-y-2.5">
                 {existingEvents.map((doc) => {
-                  // Analyze run status
                   let slotsFilled = 0;
-                  let hasStarted = false;
-                  let allFinished = true;
+                  const docComps: Competitor[] = [];
                   for (let i = 1; i <= 20; i++) {
                     const str = doc[`competitor${i}`];
                     if (str && str.trim()) {
                       slotsFilled++;
                       try {
-                        const parsed = JSON.parse(str);
-                        if (parsed.status !== 'Pending') {
-                          hasStarted = true;
-                        }
-                        if (parsed.status !== 'Finished' && parsed.status !== 'Disqualified') {
-                          allFinished = false;
-                        }
-                      } catch (e) {
-                        allFinished = false;
-                      }
+                        docComps.push(JSON.parse(str));
+                      } catch (e) {}
                     }
                   }
-                  if (slotsFilled === 0) allFinished = false;
+                  const itemStatus = computeEventStatus(doc.status, docComps);
                   
                   return (
                     <div
@@ -2058,24 +2222,8 @@ const HomePage: React.FC<HomePageProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {slotsFilled === 0 ? (
-                          <span className="text-[10px] bg-slate-900/80 text-gray-400 font-mono font-semibold px-2 py-0.5 rounded-lg border border-white/10">
-                            No Competitors
-                          </span>
-                        ) : !hasStarted ? (
-                          <span className="text-[10px] bg-amber-950/60 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-amber-500/30">
-                            Not Run Yet
-                          </span>
-                        ) : !allFinished ? (
-                          <span className="text-[10px] bg-red-950/70 text-red-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-red-500/40">
-                            In Progress
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-emerald-950/60 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-lg border border-emerald-500/40">
-                            Completed
-                          </span>
-                        )}
+                      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                        <EventStatusBadge status={itemStatus} size="sm" />
 
                         <span className="text-xs bg-cyan-950 text-cyan-300 font-mono font-bold px-2.5 py-1 rounded-lg border border-cyan-500/30">
                           {slotsFilled}/20

@@ -1,11 +1,14 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Competitor, CompetitorStatus } from '../types';
+import { Competitor, CompetitorStatus, EventCompetitionStatus, computeEventStatus } from '../types';
 import ResultsChart from '../components/ResultsChart';
 import { 
   databases, 
   isAppwriteConfigured, 
-  getDbConfig 
+  getDbConfig,
+  isCorsOrNetworkError
 } from '../lib/appwrite';
+import { AppwriteCorsNotice } from '../components/AppwriteCorsNotice';
+import { EventStatusBadge } from '../components/EventStatusBadge';
 import { 
   History, 
   Calendar, 
@@ -36,6 +39,7 @@ interface ResultsPageProps {
   currentEventName: string | null;
   currentEventId: string | null;
   renameActiveEvent?: (newName: string) => Promise<void>;
+  eventStatus?: EventCompetitionStatus;
 }
 
 const PENALTY_MS = 5000;
@@ -55,7 +59,8 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
     competitors, 
     currentEventName, 
     currentEventId, 
-    renameActiveEvent 
+    renameActiveEvent,
+    eventStatus = 'Onboarding'
 }) => {
     const { role } = useAuth();
     const [isSavingPdf, setIsSavingPdf] = useState(false);
@@ -66,6 +71,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
     const [pastEvents, setPastEvents] = useState<any[]>([]);
     const [loadingPast, setLoadingPast] = useState(false);
     const [pastError, setPastError] = useState<string | null>(null);
+    const [isPastCorsError, setIsPastCorsError] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<string | null>(null);
     
     // States for currently viewing a historical past event leaderboard
@@ -175,6 +181,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
         if (!isAppwriteConfigured()) return;
         setLoadingPast(true);
         setPastError(null);
+        setIsPastCorsError(false);
         try {
             const config = getDbConfig();
             const response = await databases.listDocuments(
@@ -184,6 +191,8 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
             setPastEvents(response.documents);
         } catch (err: any) {
             console.error("Failed to load past events archive:", err);
+            const isCors = isCorsOrNetworkError(err);
+            setIsPastCorsError(isCors);
             setPastError(err.message || "Failed to load past events from Appwrite configuration.");
         } finally {
             setLoadingPast(false);
@@ -325,18 +334,21 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
               </button>
             </div>
           ) : (
-            <div className="bg-slate-950/80 backdrop-blur-xl border border-emerald-500/40 p-5 rounded-3xl flex items-center gap-3 animate-fade-in shadow-glass-glow">
-              <div className="h-10 w-10 rounded-2xl bg-emerald-950/60 flex items-center justify-center border border-emerald-500/30 flex-shrink-0 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.2)]">
-                <Clock className="h-5 w-5 animate-pulse" />
+            <div className="bg-slate-950/80 backdrop-blur-xl border border-emerald-500/40 p-5 rounded-3xl flex items-center justify-between gap-3 animate-fade-in shadow-glass-glow flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-emerald-950/60 flex items-center justify-center border border-emerald-500/30 flex-shrink-0 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.2)]">
+                  <Clock className="h-5 w-5 animate-pulse" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold font-mono text-emerald-300 tracking-wider uppercase block">
+                    Active Live Challenge Leaderboard
+                  </span>
+                  <p className="text-xs md:text-sm font-medium text-gray-300 font-sans">
+                    Real-time data.
+                  </p>
+                </div>
               </div>
-              <div>
-                <span className="text-[10px] font-bold font-mono text-emerald-300 tracking-wider uppercase block">
-                  Active Live Challenge Leaderboard
-                </span>
-                <p className="text-xs md:text-sm font-medium text-gray-300 font-sans">
-                  Real-time data.
-                </p>
-              </div>
+              <EventStatusBadge status={eventStatus || 'Onboarding'} size="md" />
             </div>
           )}
 
@@ -579,10 +591,19 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
         </div>
 
         {pastError && (
-          <div className="p-3.5 bg-red-955/40 border border-red-500/30 rounded-2xl text-xs text-red-200 flex items-center gap-2.5">
-            <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-            <span>{pastError}</span>
-          </div>
+          isPastCorsError ? (
+            <AppwriteCorsNotice
+              errorTitle="Failed to load past events archive"
+              errorMessage={pastError}
+              onRetry={fetchPastEvents}
+              isRetrying={loadingPast}
+            />
+          ) : (
+            <div className="p-3.5 bg-red-955/40 border border-red-500/30 rounded-2xl text-xs text-red-200 flex items-center gap-2.5">
+              <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+              <span>{pastError}</span>
+            </div>
+          )
         )}
 
         {loadingPast ? (
@@ -649,8 +670,8 @@ const ResultsPage: React.FC<ResultsPageProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] font-mono">
-                      <span className="text-gray-400">Roster:</span>
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[10px] font-mono gap-1.5 flex-wrap">
+                      <EventStatusBadge status={doc.status || 'Finished'} size="sm" />
                       <span className={`font-bold px-2 py-0.5 rounded border ${isSelected ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40' : 'bg-black/60 text-gray-300 border-white/10'}`}>
                         {competitorCount} Registered
                       </span>

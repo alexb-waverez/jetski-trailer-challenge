@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Competitor, CompetitorStatus } from './types';
+import { Competitor, CompetitorStatus, EventCompetitionStatus, computeEventStatus } from './types';
 import Header from './components/Header';
 import HomePage from './pages/HomePage';
 import CompetitionPage from './pages/CompetitionPage';
@@ -24,6 +24,13 @@ const AppContent: React.FC = () => {
   const [currentEventName, setCurrentEventName] = useState<string | null>(() => {
     return localStorage.getItem('appwrite_active_event_name');
   });
+  const [eventStatus, setEventStatus] = useState<EventCompetitionStatus>(() => {
+    const saved = localStorage.getItem('appwrite_active_event_status');
+    if (saved === 'Onboarding' || saved === 'Running' || saved === 'Finished') {
+      return saved;
+    }
+    return 'Onboarding';
+  });
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error' | 'local' | null>(null);
   const [isActiveEventLoaded, setIsActiveEventLoaded] = useState(false);
   const [loadingActiveEvent, setLoadingActiveEvent] = useState(false);
@@ -33,12 +40,17 @@ const AppContent: React.FC = () => {
   const pendingSyncRef = useRef<Competitor[] | null>(null);
   const lastSyncedPayloadRef = useRef<string>("");
   const currentEventNameRef = useRef<string | null>(currentEventName);
+  const eventStatusRef = useRef<EventCompetitionStatus>(eventStatus);
   const hasAutoDiscoveredRef = useRef(false);
 
   // Synchronize ref with interactive user changes to prevent stale closure data in the write-stream
   useEffect(() => {
     currentEventNameRef.current = currentEventName;
   }, [currentEventName]);
+
+  useEffect(() => {
+    eventStatusRef.current = eventStatus;
+  }, [eventStatus]);
 
   // Restore/Load Active Event state on startup
   useEffect(() => {
@@ -68,10 +80,14 @@ const AppContent: React.FC = () => {
             const latestDoc = listRes.documents[listRes.documents.length - 1];
             activeId = latestDoc.$id;
             activeName = latestDoc.eventName || 'Challenge Event';
+            const initialStatus = computeEventStatus((latestDoc as any).status);
             setCurrentEventId(activeId);
             setCurrentEventName(activeName);
+            setEventStatus(initialStatus);
+            eventStatusRef.current = initialStatus;
             localStorage.setItem('appwrite_active_event_id', activeId);
             localStorage.setItem('appwrite_active_event_name', activeName);
+            localStorage.setItem('appwrite_active_event_status', initialStatus);
           }
         } catch (err) {
           console.warn("Could not auto-detect active event for guest:", err);
@@ -90,7 +106,11 @@ const AppContent: React.FC = () => {
         const localComps = localStorage.getItem('offline_competitors');
         if (localComps) {
           try {
-            setCompetitors(JSON.parse(localComps));
+            const parsed = JSON.parse(localComps);
+            setCompetitors(parsed);
+            const localStatus = computeEventStatus(localStorage.getItem('appwrite_active_event_status'), parsed);
+            setEventStatus(localStatus);
+            eventStatusRef.current = localStatus;
           } catch (e) {
             console.error(e);
           }
@@ -122,6 +142,11 @@ const AppContent: React.FC = () => {
           }
         }
         setCompetitors(parsedCompetitors);
+        const resolvedStatus = computeEventStatus((document as any).status, parsedCompetitors);
+        setEventStatus(resolvedStatus);
+        eventStatusRef.current = resolvedStatus;
+        localStorage.setItem('appwrite_active_event_status', resolvedStatus);
+
         // Save initial payload reference to prevent redundant writes
         lastSyncedPayloadRef.current = JSON.stringify(parsedCompetitors);
         setSyncStatus('synced');
@@ -196,6 +221,7 @@ const AppContent: React.FC = () => {
       try {
         const updateData: Record<string, any> = {
           eventName: currentEventNameRef.current || 'Challenge Event',
+          status: eventStatusRef.current || 'Onboarding',
         };
         
         for (let i = 1; i <= 20; i++) {
@@ -203,12 +229,31 @@ const AppContent: React.FC = () => {
           updateData[`competitor${i}`] = competitor ? JSON.stringify(competitor) : "";
         }
 
-        await databases.updateDocument(
-          config.databaseId,
-          config.collectionId,
-          currentEventId,
-          updateData
-        );
+        try {
+          await databases.updateDocument(
+            config.databaseId,
+            config.collectionId,
+            currentEventId,
+            updateData
+          );
+        } catch (writeErr: any) {
+          // If status attribute is not yet created in the Appwrite collection schema, fallback safely without status
+          if (
+            writeErr?.message?.toLowerCase().includes('attribute') ||
+            writeErr?.type?.toLowerCase().includes('attribute')
+          ) {
+            const fallbackData = { ...updateData };
+            delete fallbackData.status;
+            await databases.updateDocument(
+              config.databaseId,
+              config.collectionId,
+              currentEventId,
+              fallbackData
+            );
+          } else {
+            throw writeErr;
+          }
+        }
         
         lastSyncedPayloadRef.current = currentPayload;
         setSyncStatus('synced');
@@ -221,9 +266,12 @@ const AppContent: React.FC = () => {
         ) {
           localStorage.removeItem('appwrite_active_event_id');
           localStorage.removeItem('appwrite_active_event_name');
+          localStorage.removeItem('appwrite_active_event_status');
           setCurrentEventId(null);
           setCurrentEventName(null);
           currentEventNameRef.current = null;
+          setEventStatus('Onboarding');
+          eventStatusRef.current = 'Onboarding';
         }
         setSyncStatus('error');
       } finally {
@@ -240,6 +288,26 @@ const AppContent: React.FC = () => {
     };
 
     await executeSync(updatedCompetitors);
+  };
+
+  const updateEventStatus = async (newStatus: EventCompetitionStatus) => {
+    setEventStatus(newStatus);
+    eventStatusRef.current = newStatus;
+    localStorage.setItem('appwrite_active_event_status', newStatus);
+
+    if (currentEventId && currentEventId !== 'local' && isAppwriteConfigured()) {
+      try {
+        const config = getDbConfig();
+        await databases.updateDocument(
+          config.databaseId,
+          config.collectionId,
+          currentEventId,
+          { status: newStatus }
+        );
+      } catch (err: any) {
+        console.warn("Notice: Status attribute update skipped if schema not yet created:", err);
+      }
+    }
   };
 
   const retrySync = async () => {
@@ -291,10 +359,18 @@ const AppContent: React.FC = () => {
     syncCompetitors(reorderedList);
   };
 
-  const selectEvent = (eventId: string, eventName: string, eventCompetitors: Competitor[]) => {
+  const selectEvent = (
+    eventId: string, 
+    eventName: string, 
+    eventCompetitors: Competitor[],
+    status?: EventCompetitionStatus
+  ) => {
+    const finalStatus = status || computeEventStatus(null, eventCompetitors);
     setCurrentEventId(eventId);
     setCurrentEventName(eventName);
     currentEventNameRef.current = eventName;
+    setEventStatus(finalStatus);
+    eventStatusRef.current = finalStatus;
     setCompetitors(eventCompetitors);
     lastSyncedPayloadRef.current = JSON.stringify(eventCompetitors);
     setSyncStatus(eventId === 'local' ? 'local' : 'synced');
@@ -303,6 +379,7 @@ const AppContent: React.FC = () => {
     sessionStorage.removeItem('event_manually_closed');
     localStorage.setItem('appwrite_active_event_id', eventId);
     localStorage.setItem('appwrite_active_event_name', eventName);
+    localStorage.setItem('appwrite_active_event_status', finalStatus);
     if (eventId === 'local') {
       localStorage.setItem('offline_competitors', JSON.stringify(eventCompetitors));
     }
@@ -313,6 +390,8 @@ const AppContent: React.FC = () => {
     setCurrentEventId(null);
     setCurrentEventName(null);
     currentEventNameRef.current = null;
+    setEventStatus('Onboarding');
+    eventStatusRef.current = 'Onboarding';
     setCompetitors([]);
     lastSyncedPayloadRef.current = "";
     pendingSyncRef.current = null;
@@ -321,6 +400,7 @@ const AppContent: React.FC = () => {
     setIsActiveEventLoaded(true);
     localStorage.removeItem('appwrite_active_event_id');
     localStorage.removeItem('appwrite_active_event_name');
+    localStorage.removeItem('appwrite_active_event_status');
   };
 
   const renameActiveEvent = async (newName: string) => {
@@ -370,6 +450,7 @@ const AppContent: React.FC = () => {
                   competitors={competitors} 
                   currentEventName={currentEventName}
                   currentEventId={currentEventId}
+                  eventStatus={eventStatus}
                 />
               } 
             />
@@ -381,6 +462,7 @@ const AppContent: React.FC = () => {
                   currentEventName={currentEventName}
                   currentEventId={currentEventId}
                   renameActiveEvent={renameActiveEvent}
+                  eventStatus={eventStatus}
                 />
               } 
             />
@@ -405,6 +487,8 @@ const AppContent: React.FC = () => {
                     resetCompetition={resetCompetition}
                     currentEventId={currentEventId}
                     currentEventName={currentEventName}
+                    eventStatus={eventStatus}
+                    updateEventStatus={updateEventStatus}
                     syncStatus={syncStatus}
                     retrySync={retrySync}
                     selectEvent={selectEvent}
@@ -420,7 +504,14 @@ const AppContent: React.FC = () => {
               path="/competition"
               element={
                 user && role === 'admin' ? (
-                  <CompetitionPage competitors={competitors} updateCompetitor={updateCompetitor} />
+                  <CompetitionPage 
+                    competitors={competitors} 
+                    updateCompetitor={updateCompetitor}
+                    currentEventName={currentEventName}
+                    currentEventId={currentEventId}
+                    eventStatus={eventStatus}
+                    updateEventStatus={updateEventStatus}
+                  />
                 ) : (
                   <Navigate to={user ? "/" : "/leaderboard"} replace />
                 )

@@ -68,6 +68,18 @@ npm run preview
 ## 🛠️ Features Overview
 
 - **Dynamic Role Selector**: Swap permissions instantly between a read-only **Spectator** and an administrative **Course Marshal (Admin)** from the header controls.
+- **Competition Status Lifecycle**: Track the overall competition status (`Onboarding` &rarr; `Running` &rarr; `Finished`) with live status badges across the Leaderboard, Home page, and Live Competition room. Admins can officially conclude events using the dedicated **Finish Competition** action button.
 - **Roster & Penalty Register**: Admins can register up to 20 competitors, start/stop timers, tally custom penalties (+5 seconds per infraction), or disqualify/reinstate pilots.
 - **Sponsor Support Pool**: Authenticated spectators can select pending competitors to place supporting backup bids ($) on their specific runs (locked once a competitor's run starts or completes).
 - **Leaderboards & Delta Graph**: Displays comprehensive rankings, raw course times vs. penalty margins, and historical challenge lookups. Provides a customized **Save Results as PDF** report generator.
+
+---
+
+## 🗄️ Appwrite Database Schema: `events` Collection
+
+| Attribute | Type | Size | Required | Default / Values | Description |
+|---|---|---|---|---|---|
+| `eventName` | String (varchar) | 255 | Yes | - | Name/title of the competition |
+| `status` | String (varchar) | 50 | No | `Onboarding` | Current phase: `Onboarding`, `Running`, or `Finished` |
+| `competitor1` .. `competitor20` | String (varchar) | 5000 | No | `""` | JSON serialized competitor slot records |
+

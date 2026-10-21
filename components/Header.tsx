@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
-import { Settings as SettingsIcon, RotateCcw, X, Database, Save, LogOut, LogIn } from 'lucide-react';
+import { Settings as SettingsIcon, RotateCcw, X, Database, Save, LogOut, LogIn, Globe, Copy, Check, ExternalLink } from 'lucide-react';
 import { getFullDbConfig, saveFullDbConfig } from '../lib/appwrite';
 import glowingWaveLogo from '../src/assets/images/glowing_wave_logo_1779561795140.png';
 
@@ -13,6 +13,8 @@ const Header: React.FC = () => {
   
   // Settings Form State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [endpointVal, setEndpointVal] = useState('');
+  const [projectIdVal, setProjectIdVal] = useState('');
   const [dbId, setDbId] = useState('');
   const [eventsId, setEventsId] = useState('');
   const [usersId, setUsersId] = useState('');
@@ -20,6 +22,7 @@ const Header: React.FC = () => {
   const [attendeesId, setAttendeesId] = useState('');
 
   const [showResetPrompt, setShowResetPrompt] = useState(false);
+  const [copiedHost, setCopiedHost] = useState(false);
 
   // Close modal on Escape key and lock body scroll
   useEffect(() => {
@@ -41,6 +44,8 @@ const Header: React.FC = () => {
 
   const openSettings = () => {
     const config = getFullDbConfig();
+    setEndpointVal(config.endpoint);
+    setProjectIdVal(config.projectId);
     setDbId(config.databaseId);
     setEventsId(config.collectionId);
     setUsersId(config.usersCollectionId);
@@ -53,6 +58,8 @@ const Header: React.FC = () => {
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     saveFullDbConfig({
+      endpoint: endpointVal.trim(),
+      projectId: projectIdVal.trim(),
       databaseId: dbId.trim(),
       collectionId: eventsId.trim(),
       usersCollectionId: usersId.trim(),
@@ -64,6 +71,8 @@ const Header: React.FC = () => {
   };
 
   const handleResetSettings = () => {
+    localStorage.removeItem('appwrite_endpoint');
+    localStorage.removeItem('appwrite_project_id');
     localStorage.removeItem('appwrite_database_id');
     localStorage.removeItem('appwrite_collection_id');
     localStorage.removeItem('appwrite_users_collection_id');
@@ -438,6 +447,73 @@ const Header: React.FC = () => {
                 </p>
 
                 <div className="space-y-3">
+                  {/* Web Platform Origin Guidance */}
+                  <div className="bg-gradient-to-r from-amber-955/40 via-cyan-955/20 to-black p-3.5 rounded-xl border border-amber-500/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-amber-300 font-mono text-[11px] flex items-center gap-1.5 uppercase">
+                        <Globe className="h-3.5 w-3.5 text-amber-400" /> Appwrite Web Platform
+                      </span>
+                      <a
+                        href={projectIdVal ? `https://cloud.appwrite.io/console/project-${projectIdVal}` : 'https://cloud.appwrite.io/console'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono underline flex items-center gap-1"
+                      >
+                        <span>Console</span>
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-gray-300 font-sans leading-normal">
+                      For Appwrite to allow browser requests on this domain, add this hostname under <strong>Platforms &rarr; Web</strong> in your Appwrite Console:
+                    </p>
+                    <div className="flex items-center justify-between gap-2 bg-black/70 p-1.5 px-2.5 rounded-lg border border-white/10 font-mono text-xs">
+                      <span className="text-cyan-300 truncate select-all">{typeof window !== 'undefined' ? window.location.hostname : 'localhost'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+                          navigator.clipboard.writeText(host);
+                          setCopiedHost(true);
+                          setTimeout(() => setCopiedHost(false), 2000);
+                        }}
+                        className="px-2 py-0.5 bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 text-[10px] rounded font-bold flex items-center gap-1 transition cursor-pointer shrink-0"
+                      >
+                        {copiedHost ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        <span>{copiedHost ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Appwrite Endpoint Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-cyan-300 mb-1">
+                      Appwrite Endpoint URL
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={endpointVal}
+                      onChange={(e) => setEndpointVal(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. https://sfo.cloud.appwrite.io/v1 or https://cloud.appwrite.io/v1"
+                    />
+                  </div>
+
+                  {/* Appwrite Project ID Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-cyan-300 mb-1">
+                      Appwrite Project ID
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={projectIdVal}
+                      onChange={(e) => setProjectIdVal(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-black/70 border border-white/10 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      placeholder="e.g. 6a0f5eb4002e57b52378"
+                    />
+                  </div>
+
                   {/* Database ID Input */}
                   <div>
                     <label className="block text-[11px] font-bold font-mono uppercase tracking-widest text-cyan-300 mb-1">

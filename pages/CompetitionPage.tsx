@@ -1,22 +1,51 @@
-
 import React, { useState } from 'react';
-import { Competitor, CompetitorStatus } from '../types';
+import { Competitor, CompetitorStatus, EventCompetitionStatus } from '../types';
 import Timer from '../components/Timer';
 import { useAuth } from '../components/AuthProvider';
-import { ArrowDownAZ, ArrowUpAZ, Search, Filter, RefreshCw, Trophy, Users } from 'lucide-react';
+import { EventStatusBadge } from '../components/EventStatusBadge';
+import { 
+  ArrowDownAZ, 
+  ArrowUpAZ, 
+  Search, 
+  Filter, 
+  RefreshCw, 
+  Trophy, 
+  Users, 
+  Flag, 
+  CheckCircle2, 
+  AlertTriangle, 
+  X,
+  Play
+} from 'lucide-react';
 
 interface CompetitionPageProps {
   competitors: Competitor[];
   updateCompetitor: (id: string, updates: Partial<Competitor>) => void;
+  currentEventName?: string | null;
+  currentEventId?: string | null;
+  eventStatus?: EventCompetitionStatus;
+  updateEventStatus?: (status: EventCompetitionStatus) => void;
 }
 
-const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCompetitor }) => {
+const CompetitionPage: React.FC<CompetitionPageProps> = ({ 
+  competitors, 
+  updateCompetitor,
+  currentEventName,
+  currentEventId,
+  eventStatus = 'Onboarding',
+  updateEventStatus,
+}) => {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'default' | 'az' | 'za'>('default');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Running' | 'Finished' | 'Disqualified'>('ALL');
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+
+  const pendingCount = competitors.filter(c => c.status === CompetitorStatus.Pending).length;
+  const runningCount = competitors.filter(c => c.status === CompetitorStatus.Running).length;
+  const finishedCount = competitors.filter(c => c.status === CompetitorStatus.Finished || c.status === CompetitorStatus.Disqualified).length;
 
   const filteredCompetitors = [...competitors]
     .filter(c => {
@@ -37,6 +66,10 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
   const handleTimerToggle = (competitor: Competitor) => {
     if (!isAdmin) return;
     if (competitor.status === CompetitorStatus.Pending) {
+      // Transition overall event status from Onboarding to Running once any competitor starts
+      if (eventStatus === 'Onboarding' && updateEventStatus) {
+        updateEventStatus('Running');
+      }
       updateCompetitor(competitor.id, {
         status: CompetitorStatus.Running,
         startTime: Date.now(),
@@ -48,6 +81,21 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
         endTime,
         elapsedTime: endTime - (competitor.startTime || endTime),
       });
+    }
+  };
+
+  const handleFinishCompetition = () => {
+    if (!isAdmin) return;
+    if (updateEventStatus) {
+      updateEventStatus('Finished');
+    }
+    setShowFinishConfirm(false);
+  };
+
+  const handleReopenCompetition = () => {
+    if (!isAdmin) return;
+    if (updateEventStatus) {
+      updateEventStatus('Running');
     }
   };
 
@@ -101,14 +149,155 @@ const CompetitionPage: React.FC<CompetitionPageProps> = ({ competitors, updateCo
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
-      <div className="text-center space-y-2">
-        <h1 className="font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white text-3xl md:text-4xl drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
-          Competition Live
-        </h1>
-        <p className="text-sm md:text-base text-gray-300 max-w-xl mx-auto font-sans leading-relaxed">
-          Real-time precision timers and penalty points tracking for active course runs.
-        </p>
+      {/* Top Header Card with Event Name, Live Status, and Finish Competition Control */}
+      <div className="bg-slate-950/70 backdrop-blur-xl border border-white/[0.08] p-6 rounded-3xl shadow-glass-glow flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="text-center md:text-left space-y-2">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-gray-400">
+              Active Challenge:
+            </span>
+            <span className="font-orbitron font-black text-cyan-300 text-sm tracking-wider">
+              {currentEventName || 'Challenge Event'}
+            </span>
+            <EventStatusBadge status={eventStatus} size="sm" />
+          </div>
+          <h1 className="font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white text-2xl sm:text-3xl md:text-4xl drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
+            Competition Live
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-300 max-w-xl font-sans leading-relaxed">
+            Real-time precision timers and penalty points tracking for active course runs.
+          </p>
+        </div>
+
+        {/* Administration Status Actions */}
+        {isAdmin && (
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+            {eventStatus === 'Onboarding' && (
+              <button
+                type="button"
+                onClick={() => updateEventStatus && updateEventStatus('Running')}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white font-orbitron font-bold italic uppercase tracking-wider rounded-2xl text-xs transition cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.3)] border border-amber-400/40"
+                title="Mark competition status as Running"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                <span>Start Competition</span>
+              </button>
+            )}
+
+            {eventStatus !== 'Finished' ? (
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirm(true)}
+                className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-orbitron font-extrabold italic uppercase tracking-wider transition cursor-pointer flex items-center gap-2 border shadow-lg ${
+                  finishedCount > 0 && pendingCount === 0 && runningCount === 0
+                    ? 'bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 hover:from-emerald-500 hover:to-cyan-400 text-white border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-pulse'
+                    : 'bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
+                }`}
+                title="Finish competition and mark results official"
+              >
+                <Flag className="h-4 w-4" />
+                <span>Finish Competition</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="px-4 py-2 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-orbitron font-bold italic uppercase tracking-wider rounded-2xl text-xs flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.25)]">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>Competition Finished</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleReopenCompetition}
+                  className="px-3 py-2 bg-black/60 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-2xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+                  title="Reopen or resume competition runs"
+                >
+                  Reopen
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Confirmation Modal for Finish Button */}
+      {showFinishConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div 
+            className="bg-slate-950/95 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-[0_0_30px_rgba(16,185,129,0.3)] space-y-6 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2.5 bg-emerald-950/80 border border-emerald-500/40 rounded-2xl text-emerald-400">
+                  <Flag className="h-6 w-6" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-orbitron font-extrabold italic uppercase tracking-wider text-white">
+                    Finish Competition
+                  </h3>
+                  <p className="text-xs text-gray-400 font-mono">
+                    {currentEventName || 'Challenge Event'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirm(false)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-300 font-sans leading-relaxed">
+              <p>
+                Are you sure you want to finish this competition? This will set the competition status to <strong className="text-emerald-400 font-mono uppercase">Finished</strong>.
+              </p>
+              
+              <div className="bg-black/60 p-3.5 rounded-2xl border border-white/10 font-mono text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Completed runs:</span>
+                  <span className="text-emerald-400 font-bold">{finishedCount} / {competitors.length}</span>
+                </div>
+                {pendingCount > 0 && (
+                  <div className="flex justify-between text-amber-300">
+                    <span>Awaiting run:</span>
+                    <span className="font-bold">{pendingCount} racers</span>
+                  </div>
+                )}
+                {runningCount > 0 && (
+                  <div className="flex justify-between text-red-300">
+                    <span>Currently on course:</span>
+                    <span className="font-bold">{runningCount} racers</span>
+                  </div>
+                )}
+              </div>
+
+              {pendingCount > 0 && (
+                <p className="text-[11px] text-amber-300 bg-amber-955/40 border border-amber-500/30 p-2.5 rounded-xl">
+                  ⚠️ Note: {pendingCount} racers have not started their run yet.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirm(false)}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-gray-300 rounded-xl text-xs font-mono font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishCompetition}
+                className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-orbitron font-extrabold italic uppercase tracking-wider rounded-xl text-xs transition cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.35)] border border-emerald-400/40"
+              >
+                Confirm & Finish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!isAdmin && (
         <div className="bg-slate-950/70 backdrop-blur-xl border border-cyan-500/30 p-5 rounded-3xl flex items-start gap-3.5 max-w-2xl mx-auto text-left shadow-glass-glow">

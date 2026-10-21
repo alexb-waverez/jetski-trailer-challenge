@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Competitor, CompetitorStatus } from '../types';
+import { Competitor, CompetitorStatus, EventCompetitionStatus } from '../types';
 import { client, databases, getDbConfig, isAppwriteConfigured } from '../lib/appwrite';
+import { EventStatusBadge } from '../components/EventStatusBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -20,6 +21,7 @@ interface LeaderboardPageProps {
   competitors: Competitor[];
   currentEventName: string | null;
   currentEventId: string | null;
+  eventStatus?: EventCompetitionStatus;
 }
 
 const PENALTY_MS = 5000;
@@ -66,9 +68,11 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   competitors: initialCompetitors,
   currentEventName: initialEventName,
   currentEventId,
+  eventStatus: initialEventStatus,
 }) => {
   const [eventName, setEventName] = useState(initialEventName || 'Challenge Event');
   const [competitors, setCompetitors] = useState<Competitor[]>(initialCompetitors);
+  const [status, setStatus] = useState<EventCompetitionStatus>(initialEventStatus || 'Onboarding');
   const [isLive, setIsLive] = useState(false);
 
   // Sorting state for Racers Awaiting Run
@@ -85,6 +89,12 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
       setEventName(initialEventName);
     }
   }, [initialEventName]);
+
+  useEffect(() => {
+    if (initialEventStatus) {
+      setStatus(initialEventStatus);
+    }
+  }, [initialEventStatus]);
 
   // Appwrite Realtime Subscriptions
   useEffect(() => {
@@ -118,6 +128,9 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
       setCompetitors(updatedCompetitors);
       if (doc.eventName) {
         setEventName(doc.eventName);
+      }
+      if (doc.status) {
+        setStatus(doc.status as EventCompetitionStatus);
       }
     });
 
@@ -241,6 +254,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             <span className="text-xs text-gray-400 font-bold font-mono uppercase tracking-widest pl-2">
               COMPETITION TIMINGS
             </span>
+            <EventStatusBadge status={status} size="sm" />
           </div>
           <h1 className="text-3xl md:text-4xl font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
             {eventName}
@@ -422,8 +436,18 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                   <th className="py-4 px-6 font-bold uppercase text-center w-20">Rank</th>
                   <th className="py-4 px-6 font-bold uppercase">Competitor</th>
                   <th className="py-4 px-6 font-bold uppercase text-center">Penalties</th>
-                  <th className="py-4 px-6 font-bold uppercase text-center">Course Run</th>
-                  <th className="py-4 px-6 font-bold uppercase text-right w-44">Total Adjusted</th>
+                  <th className="py-4 px-6 font-bold uppercase text-center" title="The raw, unpenalized elapsed stopwatch time on the course">
+                    <div className="flex flex-col items-center">
+                      <span>Course Run</span>
+                      <span className="text-[9px] font-mono text-cyan-400/80 font-normal lowercase tracking-normal">raw track time</span>
+                    </div>
+                  </th>
+                  <th className="py-4 px-6 font-bold uppercase text-right w-44" title="Final official time = Course Run + (Penalties × 5s)">
+                    <div className="flex flex-col items-end">
+                      <span>Total Adjusted</span>
+                      <span className="text-[9px] font-mono text-emerald-400/80 font-normal lowercase tracking-normal">run time + penalties</span>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
