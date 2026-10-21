@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Competitor, CompetitorStatus, EventCompetitionStatus } from '../types';
-import { client, databases, getDbConfig, isAppwriteConfigured } from '../lib/appwrite';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Competitor, CompetitorStatus, EventCompetitionStatus, computeEventStatus, parseCompetitorsFromDoc } from '../types';
+import { client, databases, getDbConfig, isAppwriteConfigured, isCorsOrNetworkError } from '../lib/appwrite';
 import { EventStatusBadge } from '../components/EventStatusBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -14,7 +14,18 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   Shuffle,
-  RotateCcw
+  RotateCcw,
+  RefreshCw,
+  Radio,
+  Layers,
+  Search,
+  X,
+  CheckCircle2,
+  Calendar,
+  ExternalLink,
+  ChevronRight,
+  Flame,
+  Loader2
 } from 'lucide-react';
 
 interface LeaderboardPageProps {
@@ -22,6 +33,12 @@ interface LeaderboardPageProps {
   currentEventName: string | null;
   currentEventId: string | null;
   eventStatus?: EventCompetitionStatus;
+  selectEvent?: (
+    eventId: string,
+    eventName: string,
+    competitors: Competitor[],
+    status?: EventCompetitionStatus
+  ) => void;
 }
 
 const PENALTY_MS = 5000;
@@ -69,19 +86,49 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   currentEventName: initialEventName,
   currentEventId,
   eventStatus: initialEventStatus,
+  selectEvent,
 }) => {
+  // Local active event ID allows public spectators to switch competitions if desired
+  const [activeEventId, setActiveEventId] = useState<string | null>(currentEventId);
   const [eventName, setEventName] = useState(initialEventName || 'Challenge Event');
   const [competitors, setCompetitors] = useState<Competitor[]>(initialCompetitors);
   const [status, setStatus] = useState<EventCompetitionStatus>(initialEventStatus || 'Onboarding');
-  const [isLive, setIsLive] = useState(false);
+  
+  // Real-time synchronization state
+  const [syncMode, setSyncMode] = useState<'websocket' | 'polling' | 'local' | 'connecting'>('connecting');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
+  const [secondsAgo, setSecondsAgo] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Cross-event detection: detect if another competition has become 'Running'
+  const [otherRunningEvent, setOtherRunningEvent] = useState<{ id: string; name: string } | null>(null);
+
+  // Switch Event Modal states for public users
+  const [showSwitchModal, setShowSwitchModal] = useState(false);
+  const [availableEvents, setAvailableEvents] = useState<any[]>([]);
+  const [loadingEventsList, setLoadingEventsList] = useState(false);
+  const [eventsListError, setEventsListError] = useState<string | null>(null);
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Sorting state for Racers Awaiting Run
   const [awaitingSort, setAwaitingSort] = useState<'default' | 'az' | 'za' | 'random'>('default');
   const [randomOrderIds, setRandomOrderIds] = useState<string[]>([]);
 
-  // Keep local states synced with props changes
+  // Ref tracking current competitors to prevent redundant re-renders
+  const lastPayloadStringRef = useRef<string>(JSON.stringify(initialCompetitors));
+
+  // Sync props changes from parent
   useEffect(() => {
-    setCompetitors(initialCompetitors);
+    if (currentEventId && currentEventId !== activeEventId) {
+      setActiveEventId(currentEventId);
+    }
+  }, [currentEventId]);
+
+  useEffect(() => {
+    if (initialCompetitors && initialCompetitors.length > 0) {
+      setCompetitors(initialCompetitors);
+      lastPayloadStringRef.current = JSON.stringify(initialCompetitors);
+    }
   }, [initialCompetitors]);
 
   useEffect(() => {
@@ -96,66 +143,230 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     }
   }, [initialEventStatus]);
 
-  // Appwrite Realtime Subscriptions
+  // Keep secondsAgo counter active
   useEffect(() => {
-    if (!currentEventId || currentEventId === 'local' || !isAppwriteConfigured()) {
-      setIsLive(false);
+    const t = setInterval(() => {
+      if (lastSyncTime) {
+        setSecondsAgo(Math.max(0, Math.floor((Date.now() - lastSyncTime.getTime()) / 1000)));
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [lastSyncTime]);
+
+  // Direct document fetcher for active event
+  const fetchEventData = async (targetId: string, showIndicator = false) => {
+    if (!targetId) return;
+    if (showIndicator) setIsRefreshing(true);
+
+    if (targetId === 'local' || !isAppwriteConfigured()) {
+      const localComps = localStorage.getItem('offline_competitors');
+      const localName = localStorage.getItem('appwrite_active_event_name');
+      const localStatus = localStorage.getItem('appwrite_active_event_status');
+      if (localComps) {
+        try {
+          const parsed = JSON.parse(localComps);
+          setCompetitors(parsed);
+          setStatus(computeEventStatus(localStatus, parsed));
+        } catch (e) {}
+      }
+      if (localName) setEventName(localName);
+      setSyncMode('local');
+      setLastSyncTime(new Date());
+      if (showIndicator) setTimeout(() => setIsRefreshing(false), 250);
+      return;
+    }
+
+    try {
+      const config = getDbConfig();
+      const doc: any = await databases.getDocument(
+        config.databaseId,
+        config.collectionId,
+        targetId
+      );
+
+      const parsedComps = parseCompetitorsFromDoc(doc);
+      const payloadString = JSON.stringify(parsedComps);
+      
+      // Update state if anything changed
+      if (payloadString !== lastPayloadStringRef.current) {
+        lastPayloadStringRef.current = payloadString;
+        setCompetitors(parsedComps);
+      }
+
+      if (doc.eventName) {
+        setEventName(doc.eventName);
+      }
+
+      const computed = computeEventStatus(doc.status, parsedComps);
+      setStatus(computed);
+      setLastSyncTime(new Date());
+      if (syncMode === 'connecting') {
+        setSyncMode('polling');
+      }
+    } catch (err) {
+      console.warn("Polling error on public event fetch:", err);
+    } finally {
+      if (showIndicator) setTimeout(() => setIsRefreshing(false), 250);
+    }
+  };
+
+  // Cross-event scanner: checks if another event in the collection is actively 'Running'
+  const checkActiveRunningEvents = async () => {
+    if (!isAppwriteConfigured()) return;
+    try {
+      const config = getDbConfig();
+      const res = await databases.listDocuments(config.databaseId, config.collectionId);
+      const runningDoc = res.documents.find((d: any) => d.status === 'Running');
+      if (runningDoc) {
+        if (activeEventId && runningDoc.$id !== activeEventId) {
+          // Another event is actively running!
+          setOtherRunningEvent({
+            id: runningDoc.$id,
+            name: runningDoc.eventName || 'Challenge Event',
+          });
+        } else {
+          setOtherRunningEvent(null);
+        }
+      } else {
+        setOtherRunningEvent(null);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  // Auto-discover event on mount if no activeEventId is present
+  useEffect(() => {
+    if (!activeEventId && isAppwriteConfigured()) {
+      const config = getDbConfig();
+      databases.listDocuments(config.databaseId, config.collectionId)
+        .then(res => {
+          if (res.documents.length > 0) {
+            const runningDoc = res.documents.find((d: any) => d.status === 'Running');
+            const onboardingDoc = res.documents.slice().reverse().find((d: any) => d.status === 'Onboarding');
+            const chosen = runningDoc || onboardingDoc || res.documents[res.documents.length - 1];
+            
+            setActiveEventId(chosen.$id);
+            setEventName(chosen.eventName || 'Challenge Event');
+            const comps = parseCompetitorsFromDoc(chosen);
+            setCompetitors(comps);
+            const computedStatus = computeEventStatus(chosen.status, comps);
+            setStatus(computedStatus);
+            setLastSyncTime(new Date());
+
+            if (selectEvent) {
+              selectEvent(chosen.$id, chosen.eventName || 'Challenge Event', comps, computedStatus);
+            }
+          }
+        })
+        .catch(err => {
+          console.warn("Failed auto-discovering event for leaderboard:", err);
+        });
+    }
+  }, [activeEventId]);
+
+  // Primary Hybrid Realtime Engine: WebSocket Subscription + High-Frequency Adaptive Polling Fallback
+  useEffect(() => {
+    if (!activeEventId || activeEventId === 'local' || !isAppwriteConfigured()) {
+      if (activeEventId === 'local') setSyncMode('local');
       return;
     }
 
     const config = getDbConfig();
-    const channel = `databases.${config.databaseId}.collections.${config.collectionId}.documents.${currentEventId}`;
-    
-    // Set status to live subscribed
-    setIsLive(true);
+    const docChannel = `databases.${config.databaseId}.collections.${config.collectionId}.documents.${activeEventId}`;
+    const collChannel = `databases.${config.databaseId}.collections.${config.collectionId}.documents`;
 
-    const unsubscribe = client.subscribe(channel, (response: any) => {
-      const doc = response.payload;
-      if (!doc) return;
+    let isSubscribed = true;
+    let unsubscribe: (() => void) | null = null;
 
-      const updatedCompetitors: Competitor[] = [];
-      for (let i = 1; i <= 20; i++) {
-        const compStr = doc[`competitor${i}`];
-        if (compStr && compStr.trim()) {
-          try {
-            updatedCompetitors.push(JSON.parse(compStr));
-          } catch (e) {
-            console.error("Failed to parse real-time competitor payload:", e);
+    // 1. Initial immediate pull
+    fetchEventData(activeEventId);
+
+    // 2. Setup Appwrite Realtime WebSocket Subscription
+    try {
+      unsubscribe = client.subscribe([docChannel, collChannel], (response: any) => {
+        if (!isSubscribed) return;
+        const doc = response.payload;
+        if (!doc) return;
+
+        // If the payload is for our actively monitored event
+        if (doc.$id === activeEventId || (!doc.$id && response.channels?.some((c: string) => c.includes(activeEventId)))) {
+          const updatedComps = parseCompetitorsFromDoc(doc);
+          const payloadStr = JSON.stringify(updatedComps);
+          lastPayloadStringRef.current = payloadStr;
+          setCompetitors(updatedComps);
+
+          if (doc.eventName) {
+            setEventName(doc.eventName);
           }
+          const resolvedStatus = computeEventStatus(doc.status, updatedComps);
+          setStatus(resolvedStatus);
+          setSyncMode('websocket');
+          setLastSyncTime(new Date());
+        } else if (doc.status === 'Running' && doc.$id !== activeEventId) {
+          // A different event transitioned to Running!
+          setOtherRunningEvent({
+            id: doc.$id,
+            name: doc.eventName || 'Challenge Event',
+          });
         }
-      }
+      });
+      setSyncMode('websocket');
+    } catch (err) {
+      console.warn("WebSocket subscribe error, using fast polling fallback:", err);
+      setSyncMode('polling');
+    }
 
-      setCompetitors(updatedCompetitors);
-      if (doc.eventName) {
-        setEventName(doc.eventName);
+    // 3. Adaptive High-Frequency Polling Fallback
+    // When the competition is 'Running' or racers are currently on course, poll every 1500ms
+    // Otherwise, poll every 3000ms
+    const isActivelyRunning = status === 'Running' || competitors.some(c => c.status === CompetitorStatus.Running);
+    const pollIntervalTime = isActivelyRunning ? 1500 : 3000;
+    let pollCount = 0;
+
+    const interval = setInterval(() => {
+      if (!isSubscribed) return;
+      pollCount++;
+      fetchEventData(activeEventId);
+
+      // Periodically scan for other running events every 3rd cycle (~4.5s)
+      if (pollCount % 3 === 0) {
+        checkActiveRunningEvents();
       }
-      if (doc.status) {
-        setStatus(doc.status as EventCompetitionStatus);
-      }
-    });
+    }, pollIntervalTime);
 
     return () => {
-      unsubscribe();
+      isSubscribed = false;
+      if (unsubscribe) {
+        try {
+          unsubscribe();
+        } catch (e) {}
+      }
+      clearInterval(interval);
     };
-  }, [currentEventId]);
+  }, [activeEventId, status]);
 
-  // local backup sync if in local offline mode
+  // Local storage cross-tab sync (instant zero-latency tab-to-tab updates)
   useEffect(() => {
-    if (currentEventId === 'local') {
-      const interval = setInterval(() => {
-        const localComps = localStorage.getItem('offline_competitors');
-        if (localComps) {
-          try {
-            const parsed = JSON.parse(localComps);
-            setCompetitors(parsed);
-          } catch (e) {
-            // ignore JSON error
-          }
-        }
-      }, 1000); // Check local storage every second for offline timing syncing
-      return () => clearInterval(interval);
-    }
-  }, [currentEventId]);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'offline_competitors' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setCompetitors(parsed);
+          setLastSyncTime(new Date());
+        } catch (err) {}
+      }
+      if (e.key === 'appwrite_active_event_status' && e.newValue) {
+        setStatus(e.newValue as EventCompetitionStatus);
+      }
+      if (e.key === 'appwrite_active_event_name' && e.newValue) {
+        setEventName(e.newValue);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Compute Leaderboard classifications
   const finishedList = competitors
@@ -234,35 +445,193 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     ? mostPenalizedRacers.map(r => r.fullName).join(', ')
     : 'None';
 
+  // Handler to switch to another active running event
+  const handleSwitchToRunningEvent = async () => {
+    if (!otherRunningEvent) return;
+    const targetId = otherRunningEvent.id;
+    const targetName = otherRunningEvent.name;
+    setActiveEventId(targetId);
+    setEventName(targetName);
+    setOtherRunningEvent(null);
+    await fetchEventData(targetId, true);
+    if (selectEvent) {
+      selectEvent(targetId, targetName, competitors, 'Running');
+    }
+  };
+
+  // Handler to load all events for the competition switcher modal
+  const fetchAllEventsForModal = async () => {
+    setLoadingEventsList(true);
+    setEventsListError(null);
+    try {
+      if (!isAppwriteConfigured()) {
+        const localComps = localStorage.getItem('offline_competitors');
+        const localName = localStorage.getItem('appwrite_active_event_name') || 'Local Offline Mode';
+        const localStatus = localStorage.getItem('appwrite_active_event_status') || 'Onboarding';
+        const comps = localComps ? JSON.parse(localComps) : [];
+        setAvailableEvents([{
+          $id: 'local',
+          eventName: localName,
+          status: localStatus,
+          competitorsCount: comps.length,
+          competitors: comps,
+        }]);
+        return;
+      }
+      const config = getDbConfig();
+      const res = await databases.listDocuments(config.databaseId, config.collectionId);
+      const mapped = res.documents.map((d: any) => {
+        const comps = parseCompetitorsFromDoc(d);
+        return {
+          $id: d.$id,
+          eventName: d.eventName || 'Challenge Event',
+          status: computeEventStatus(d.status, comps),
+          competitorsCount: comps.length,
+          competitors: comps,
+          $createdAt: d.$createdAt,
+        };
+      });
+      // Sort: 'Running' first, then latest created
+      mapped.sort((a: any, b: any) => {
+        if (a.status === 'Running' && b.status !== 'Running') return -1;
+        if (b.status === 'Running' && a.status !== 'Running') return 1;
+        return (new Date(b.$createdAt || 0).getTime()) - (new Date(a.$createdAt || 0).getTime());
+      });
+      setAvailableEvents(mapped);
+    } catch (err: any) {
+      console.error("Failed to fetch events for modal:", err);
+      setEventsListError(err.message || "Failed to load competitions list");
+    } finally {
+      setLoadingEventsList(false);
+    }
+  };
+
+  const handleSelectEventFromModal = (ev: any) => {
+    setActiveEventId(ev.$id);
+    setEventName(ev.eventName);
+    setCompetitors(ev.competitors || []);
+    setStatus(ev.status || 'Onboarding');
+    lastPayloadStringRef.current = JSON.stringify(ev.competitors || []);
+    setShowSwitchModal(false);
+    if (selectEvent) {
+      selectEvent(ev.$id, ev.eventName, ev.competitors || [], ev.status);
+    }
+    fetchEventData(ev.$id, true);
+  };
+
+  const filteredEvents = availableEvents.filter(ev => 
+    ev.eventName.toLowerCase().includes(searchFilter.toLowerCase())
+  );
+
   return (
     <div className="space-y-8 animate-fade-in relative pb-12">
+      {/* Live running competition notification banner if viewing a different competition */}
+      {otherRunningEvent && (
+        <div className="bg-gradient-to-r from-red-950/90 via-amber-950/80 to-red-950/90 border border-amber-500/60 p-4 rounded-3xl shadow-[0_0_20px_rgba(245,158,11,0.25)] flex flex-col sm:flex-row items-center justify-between gap-4 backdrop-blur-xl">
+          <div className="flex items-center gap-3 text-center sm:text-left">
+            <div className="h-3 w-3 rounded-full bg-red-500 animate-ping shrink-0" />
+            <div>
+              <div className="flex items-center gap-2 justify-center sm:justify-start">
+                <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-widest bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                  LIVE ACTION DETECTED
+                </span>
+                <span className="text-xs text-gray-300 font-mono">Another competition is currently running!</span>
+              </div>
+              <p className="font-orbitron font-black text-white text-base mt-0.5">
+                "{otherRunningEvent.name}" is LIVE on the course
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSwitchToRunningEvent}
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 hover:from-amber-400 hover:to-red-400 text-black font-orbitron font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.4)] whitespace-nowrap flex items-center gap-1.5"
+          >
+            <Zap className="h-3.5 w-3.5 fill-black" />
+            <span>Switch to Live Event</span>
+          </button>
+        </div>
+      )}
+
       {/* Title block */}
       <div className="flex flex-col md:flex-row md:items-end justify-between items-center text-center md:text-left border-b border-white/10 pb-6 gap-4">
         <div>
-          <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
-            {isLive ? (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-emerald-950/60 text-emerald-300 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>LIVE UPDATING</span>
+          <div className="flex items-center gap-2 justify-center md:justify-start mb-2 flex-wrap">
+            {/* Real-time status indicator */}
+            {syncMode === 'websocket' ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-emerald-950/70 text-emerald-300 border border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>REALTIME STREAM</span>
+                <span className="text-[9px] text-emerald-400/80 pl-1 border-l border-emerald-500/30">
+                  {secondsAgo <= 2 ? 'just now' : `${secondsAgo}s ago`}
+                </span>
+              </span>
+            ) : syncMode === 'polling' ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-sky-950/70 text-sky-300 border border-sky-500/50 shadow-[0_0_12px_rgba(14,165,233,0.25)]">
+                <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
+                <span>LIVE SYNC (1.5s)</span>
+                <span className="text-[9px] text-sky-400/80 pl-1 border-l border-sky-500/30">
+                  {secondsAgo <= 2 ? 'just now' : `${secondsAgo}s ago`}
+                </span>
+              </span>
+            ) : syncMode === 'local' ? (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-black/60 text-gray-300 border border-white/10">
+                <span className="w-2 h-2 rounded-full bg-gray-500" />
+                <span>OFFLINE LOCAL SYNC</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-black/60 text-gray-300 border border-white/10">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                <span>OFFLINE VIEW</span>
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-black/60 text-gray-400 border border-white/10">
+                <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                <span>CONNECTING FEED...</span>
               </span>
             )}
-            <span className="text-xs text-gray-400 font-bold font-mono uppercase tracking-widest pl-2">
-              COMPETITION TIMINGS
+
+            {/* Manual refresh button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (activeEventId) fetchEventData(activeEventId, true);
+                checkActiveRunningEvents();
+              }}
+              disabled={isRefreshing}
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-cyan-300 transition cursor-pointer"
+              title="Force instant sync with database"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+            </button>
+
+            <span className="text-xs text-gray-400 font-bold font-mono uppercase tracking-widest pl-1">
+              TIMINGS
             </span>
             <EventStatusBadge status={status} size="sm" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
-            {eventName}
-          </h1>
+
+          <div className="flex items-center gap-3 justify-center md:justify-start flex-wrap">
+            <h1 className="text-3xl md:text-4xl font-orbitron font-extrabold italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-white drop-shadow-[0_2px_4px_rgba(8,145,178,0.5)]">
+              {eventName}
+            </h1>
+            
+            {/* Switch / View Competitions button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowSwitchModal(true);
+                fetchAllEventsForModal();
+              }}
+              className="px-3 py-1 bg-black/60 hover:bg-white/10 border border-white/15 hover:border-cyan-500/40 text-gray-300 hover:text-cyan-300 font-mono text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Switch between different competitions or heats"
+            >
+              <Layers className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Competitions</span>
+            </button>
+          </div>
         </div>
+
         <div className="text-center md:text-right font-mono text-xs text-gray-400">
           <p className="font-bold text-cyan-400 uppercase tracking-widest text-[10px]">Realtime Central Feed</p>
-          <p className="mt-0.5">Device Connection: <span className="text-emerald-400 font-bold">STABLE</span></p>
+          <p className="mt-0.5">
+            Connection Status: <span className="text-emerald-400 font-bold uppercase">{syncMode === 'websocket' ? 'REALTIME ACTIVE' : syncMode === 'polling' ? 'LIVE POLLING' : syncMode === 'local' ? 'OFFLINE LOCAL' : 'STABLE'}</span>
+          </p>
         </div>
       </div>
 
@@ -414,7 +783,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             <h2 className="text-xl font-orbitron font-extrabold italic uppercase tracking-wider text-white">Race Rankings</h2>
           </div>
           <span className="text-[10px] text-gray-400 font-mono">
-            Sorted strictly by (Raw Time + penalties [5s each])
+            Sorted strictly by (Course Run + penalties [5s each])
           </span>
         </div>
 
@@ -683,6 +1052,134 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* PUBLIC COMPETITION SWITCHER MODAL */}
+      {showSwitchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="bg-slate-900 border border-white/15 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-cyan-400">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-orbitron font-bold text-lg text-white">Select Competition</h3>
+                  <p className="text-xs font-mono text-gray-400">View real-time timing & rankings for any event</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSwitchModal(false)}
+                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search filter input */}
+            <div className="mt-4 relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search competitions by name..."
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-2xl pl-10 pr-4 py-2.5 text-xs font-mono text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition"
+              />
+            </div>
+
+            {/* Event List */}
+            <div className="mt-4 overflow-y-auto flex-1 space-y-2.5 pr-1">
+              {loadingEventsList ? (
+                <div className="py-12 text-center text-gray-400 text-xs font-mono flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+                  <span>Loading available competitions...</span>
+                </div>
+              ) : eventsListError ? (
+                <div className="py-8 text-center text-red-400 text-xs font-mono bg-red-950/20 border border-red-500/30 rounded-2xl p-4">
+                  <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-red-400" />
+                  <p className="font-bold">Failed to load competitions list</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{eventsListError}</p>
+                  <button
+                    type="button"
+                    onClick={fetchAllEventsForModal}
+                    className="mt-3 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl text-xs font-mono border border-red-500/40 transition cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : filteredEvents.length === 0 ? (
+                <div className="py-12 text-center text-gray-400 text-xs font-mono">
+                  No competitions matching "{searchFilter}"
+                </div>
+              ) : (
+                filteredEvents.map(ev => {
+                  const isCurrent = ev.$id === activeEventId;
+                  const isRunning = ev.status === 'Running';
+
+                  return (
+                    <button
+                      key={ev.$id}
+                      type="button"
+                      onClick={() => handleSelectEventFromModal(ev)}
+                      className={`w-full text-left p-4 rounded-2xl border transition flex items-center justify-between gap-3 group cursor-pointer ${
+                        isCurrent 
+                          ? 'bg-cyan-500/15 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                          : isRunning
+                          ? 'bg-amber-950/30 hover:bg-amber-950/50 border-amber-500/40'
+                          : 'bg-black/40 hover:bg-white/5 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <h4 className="font-orbitron font-bold text-white text-sm group-hover:text-cyan-300 transition truncate">
+                            {ev.eventName}
+                          </h4>
+                          {isCurrent && (
+                            <span className="text-[9px] font-mono font-bold bg-cyan-400 text-black px-2 py-0.5 rounded-full">
+                              CURRENTLY VIEWING
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-[11px] font-mono text-gray-400 flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3 w-3 text-cyan-400" />
+                            <span>{ev.competitorsCount} racers</span>
+                          </span>
+                          {ev.$createdAt && (
+                            <span className="flex items-center gap-1 text-gray-500">
+                              <Calendar className="h-3 w-3" />
+                              <span>{new Date(ev.$createdAt).toLocaleDateString()}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <EventStatusBadge status={ev.status} size="sm" />
+                        <ChevronRight className="h-4 w-4 text-gray-500 group-hover:text-cyan-300 transition transform group-hover:translate-x-0.5" />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-gray-400">
+              <span>{availableEvents.length} competitions stored</span>
+              <button
+                type="button"
+                onClick={fetchAllEventsForModal}
+                className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingEventsList ? 'animate-spin' : ''}`} />
+                <span>Refresh List</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

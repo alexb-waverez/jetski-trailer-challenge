@@ -68,3 +68,30 @@ export const computeEventStatus = (
   return 'Onboarding';
 };
 
+export const parseCompetitorsFromDoc = (doc: any): Competitor[] => {
+  if (!doc) return [];
+  const compList: Competitor[] = [];
+  for (let i = 1; i <= 20; i++) {
+    const strVal = doc[`competitor${i}`];
+    if (strVal && typeof strVal === 'string' && strVal.trim()) {
+      try {
+        compList.push(JSON.parse(strVal));
+      } catch (e) {
+        console.error(`Failed parsing custom column storage competitor${i}`, e);
+      }
+    }
+  }
+  // Fallback: check if doc has competitors array or competitors JSON string
+  if (compList.length === 0 && doc.competitors) {
+    if (Array.isArray(doc.competitors)) {
+      compList.push(...doc.competitors);
+    } else if (typeof doc.competitors === 'string') {
+      try {
+        const parsed = JSON.parse(doc.competitors);
+        if (Array.isArray(parsed)) compList.push(...parsed);
+      } catch (e) {}
+    }
+  }
+  return compList;
+};
+

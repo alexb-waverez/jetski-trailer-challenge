@@ -77,7 +77,12 @@ const AppContent: React.FC = () => {
             config.collectionId
           );
           if (listRes.documents.length > 0) {
-            const latestDoc = listRes.documents[listRes.documents.length - 1];
+            // Priority 1: An event that is currently marked as 'Running'
+            // Priority 2: An event that is 'Onboarding'
+            // Priority 3: The latest event in the list
+            const runningDoc = listRes.documents.find((d: any) => d.status === 'Running');
+            const onboardingDoc = listRes.documents.slice().reverse().find((d: any) => d.status === 'Onboarding');
+            const latestDoc = runningDoc || onboardingDoc || listRes.documents[listRes.documents.length - 1];
             activeId = latestDoc.$id;
             activeName = latestDoc.eventName || 'Challenge Event';
             const initialStatus = computeEventStatus((latestDoc as any).status);
@@ -92,6 +97,28 @@ const AppContent: React.FC = () => {
         } catch (err) {
           console.warn("Could not auto-detect active event for guest:", err);
         }
+      } else if (!user && activeId) {
+        // If a public guest already has an event stored, check if another event is actively RUNNING
+        try {
+          const config = getDbConfig();
+          const listRes = await databases.listDocuments(
+            config.databaseId,
+            config.collectionId
+          );
+          const runningDoc = listRes.documents.find((d: any) => d.status === 'Running');
+          if (runningDoc && runningDoc.$id !== activeId) {
+            activeId = runningDoc.$id;
+            activeName = runningDoc.eventName || 'Challenge Event';
+            const initialStatus = 'Running';
+            setCurrentEventId(activeId);
+            setCurrentEventName(activeName);
+            setEventStatus(initialStatus);
+            eventStatusRef.current = initialStatus;
+            localStorage.setItem('appwrite_active_event_id', activeId);
+            localStorage.setItem('appwrite_active_event_name', activeName);
+            localStorage.setItem('appwrite_active_event_status', initialStatus);
+          }
+        } catch (e) {}
       } else {
         hasAutoDiscoveredRef.current = true;
       }
@@ -451,6 +478,7 @@ const AppContent: React.FC = () => {
                   currentEventName={currentEventName}
                   currentEventId={currentEventId}
                   eventStatus={eventStatus}
+                  selectEvent={selectEvent}
                 />
               } 
             />
