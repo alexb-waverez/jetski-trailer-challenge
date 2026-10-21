@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Competitor, CompetitorStatus, EventCompetitionStatus, computeEventStatus, parseCompetitorsFromDoc } from '../types';
-import { client, databases, getDbConfig, isAppwriteConfigured, isCorsOrNetworkError } from '../lib/appwrite';
+import { client, databases, getDbConfig, isAppwriteConfigured } from '../lib/appwrite';
 import { EventStatusBadge } from '../components/EventStatusBadge';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -10,22 +10,17 @@ import {
   Zap, 
   AlertTriangle, 
   ShieldCheck, 
-  Play,
-  ArrowDownAZ,
-  ArrowUpAZ,
-  Shuffle,
-  RotateCcw,
-  RefreshCw,
-  Radio,
-  Layers,
-  Search,
-  X,
-  CheckCircle2,
-  Calendar,
-  ExternalLink,
-  ChevronRight,
-  Flame,
-  Loader2
+  ArrowDownAZ, 
+  ArrowUpAZ, 
+  Shuffle, 
+  RotateCcw, 
+  RefreshCw, 
+  Layers, 
+  Search, 
+  X, 
+  Calendar, 
+  ChevronRight, 
+  Loader2 
 } from 'lucide-react';
 
 interface LeaderboardPageProps {
@@ -94,13 +89,13 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   const [competitors, setCompetitors] = useState<Competitor[]>(initialCompetitors);
   const [status, setStatus] = useState<EventCompetitionStatus>(initialEventStatus || 'Onboarding');
   
-  // Real-time synchronization state
-  const [syncMode, setSyncMode] = useState<'websocket' | 'polling' | 'local' | 'connecting'>('connecting');
+  // Real-time synchronization state (pure WebSocket via Appwrite Realtime wss://)
+  const [syncMode, setSyncMode] = useState<'websocket' | 'local' | 'connecting'>('connecting');
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Cross-event detection: detect if another competition has become 'Running'
+  // Cross-event detection: detect if another competition has become 'Running' via WebSocket push
   const [otherRunningEvent, setOtherRunningEvent] = useState<{ id: string; name: string } | null>(null);
 
   // Switch Event Modal states for public users
@@ -143,7 +138,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     }
   }, [initialEventStatus]);
 
-  // Keep secondsAgo counter active
+  // Keep secondsAgo counter active (purely local client-side time tracking)
   useEffect(() => {
     const t = setInterval(() => {
       if (lastSyncTime) {
@@ -153,7 +148,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     return () => clearInterval(t);
   }, [lastSyncTime]);
 
-  // Direct document fetcher for active event
+  // Baseline document fetcher for active event (runs ONCE on initial load or on manual user refresh)
   const fetchEventData = async (targetId: string, showIndicator = false) => {
     if (!targetId) return;
     if (showIndicator) setIsRefreshing(true);
@@ -200,42 +195,15 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
       const computed = computeEventStatus(doc.status, parsedComps);
       setStatus(computed);
       setLastSyncTime(new Date());
-      if (syncMode === 'connecting') {
-        setSyncMode('polling');
-      }
+      setSyncMode('websocket');
     } catch (err) {
-      console.warn("Polling error on public event fetch:", err);
+      console.warn("Initial event snapshot fetch error:", err);
     } finally {
       if (showIndicator) setTimeout(() => setIsRefreshing(false), 250);
     }
   };
 
-  // Cross-event scanner: checks if another event in the collection is actively 'Running'
-  const checkActiveRunningEvents = async () => {
-    if (!isAppwriteConfigured()) return;
-    try {
-      const config = getDbConfig();
-      const res = await databases.listDocuments(config.databaseId, config.collectionId);
-      const runningDoc = res.documents.find((d: any) => d.status === 'Running');
-      if (runningDoc) {
-        if (activeEventId && runningDoc.$id !== activeEventId) {
-          // Another event is actively running!
-          setOtherRunningEvent({
-            id: runningDoc.$id,
-            name: runningDoc.eventName || 'Challenge Event',
-          });
-        } else {
-          setOtherRunningEvent(null);
-        }
-      } else {
-        setOtherRunningEvent(null);
-      }
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  // Auto-discover event on mount if no activeEventId is present
+  // Auto-discover event on mount if no activeEventId is present (runs ONCE on startup)
   useEffect(() => {
     if (!activeEventId && isAppwriteConfigured()) {
       const config = getDbConfig();
@@ -253,6 +221,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             const computedStatus = computeEventStatus(chosen.status, comps);
             setStatus(computedStatus);
             setLastSyncTime(new Date());
+            setSyncMode('websocket');
 
             if (selectEvent) {
               selectEvent(chosen.$id, chosen.eventName || 'Challenge Event', comps, computedStatus);
@@ -265,7 +234,8 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     }
   }, [activeEventId]);
 
-  // Primary Hybrid Realtime Engine: WebSocket Subscription + High-Frequency Adaptive Polling Fallback
+  // Pure Realtime Engine: Appwrite Realtime WebSocket (wss://)
+  // Subscribes to live WebSocket channels with ZERO recurring GET requests or polling.
   useEffect(() => {
     if (!activeEventId || activeEventId === 'local' || !isAppwriteConfigured()) {
       if (activeEventId === 'local') setSyncMode('local');
@@ -279,10 +249,10 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
     let isSubscribed = true;
     let unsubscribe: (() => void) | null = null;
 
-    // 1. Initial immediate pull
+    // Load initial snapshot once upon connecting
     fetchEventData(activeEventId);
 
-    // 2. Setup Appwrite Realtime WebSocket Subscription
+    // Setup pure real-time WebSocket connection
     try {
       unsubscribe = client.subscribe([docChannel, collChannel], (response: any) => {
         if (!isSubscribed) return;
@@ -304,36 +274,19 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
           setSyncMode('websocket');
           setLastSyncTime(new Date());
         } else if (doc.status === 'Running' && doc.$id !== activeEventId) {
-          // A different event transitioned to Running!
+          // A different event transitioned to Running via WebSocket push!
           setOtherRunningEvent({
             id: doc.$id,
             name: doc.eventName || 'Challenge Event',
           });
+        } else if (otherRunningEvent && doc.$id === otherRunningEvent.id && doc.status !== 'Running') {
+          setOtherRunningEvent(null);
         }
       });
       setSyncMode('websocket');
     } catch (err) {
-      console.warn("WebSocket subscribe error, using fast polling fallback:", err);
-      setSyncMode('polling');
+      console.warn("WebSocket subscribe error:", err);
     }
-
-    // 3. Adaptive High-Frequency Polling Fallback
-    // When the competition is 'Running' or racers are currently on course, poll every 1500ms
-    // Otherwise, poll every 3000ms
-    const isActivelyRunning = status === 'Running' || competitors.some(c => c.status === CompetitorStatus.Running);
-    const pollIntervalTime = isActivelyRunning ? 1500 : 3000;
-    let pollCount = 0;
-
-    const interval = setInterval(() => {
-      if (!isSubscribed) return;
-      pollCount++;
-      fetchEventData(activeEventId);
-
-      // Periodically scan for other running events every 3rd cycle (~4.5s)
-      if (pollCount % 3 === 0) {
-        checkActiveRunningEvents();
-      }
-    }, pollIntervalTime);
 
     return () => {
       isSubscribed = false;
@@ -342,9 +295,8 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
           unsubscribe();
         } catch (e) {}
       }
-      clearInterval(interval);
     };
-  }, [activeEventId, status]);
+  }, [activeEventId]);
 
   // Local storage cross-tab sync (instant zero-latency tab-to-tab updates)
   useEffect(() => {
@@ -561,16 +513,8 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             {syncMode === 'websocket' ? (
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-emerald-950/70 text-emerald-300 border border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>REALTIME STREAM</span>
+                <span>REALTIME WEBSOCKET</span>
                 <span className="text-[9px] text-emerald-400/80 pl-1 border-l border-emerald-500/30">
-                  {secondsAgo <= 2 ? 'just now' : `${secondsAgo}s ago`}
-                </span>
-              </span>
-            ) : syncMode === 'polling' ? (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-sky-950/70 text-sky-300 border border-sky-500/50 shadow-[0_0_12px_rgba(14,165,233,0.25)]">
-                <Radio className="w-3 h-3 text-sky-400 animate-pulse" />
-                <span>LIVE SYNC (1.5s)</span>
-                <span className="text-[9px] text-sky-400/80 pl-1 border-l border-sky-500/30">
                   {secondsAgo <= 2 ? 'just now' : `${secondsAgo}s ago`}
                 </span>
               </span>
@@ -582,7 +526,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
             ) : (
               <span className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-mono font-bold leading-none bg-black/60 text-gray-400 border border-white/10">
                 <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                <span>CONNECTING FEED...</span>
+                <span>CONNECTING WEBSOCKET...</span>
               </span>
             )}
 
@@ -591,11 +535,10 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
               type="button"
               onClick={() => {
                 if (activeEventId) fetchEventData(activeEventId, true);
-                checkActiveRunningEvents();
               }}
               disabled={isRefreshing}
               className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-cyan-300 transition cursor-pointer"
-              title="Force instant sync with database"
+              title="Force snapshot sync"
             >
               <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
@@ -630,7 +573,7 @@ const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
         <div className="text-center md:text-right font-mono text-xs text-gray-400">
           <p className="font-bold text-cyan-400 uppercase tracking-widest text-[10px]">Realtime Central Feed</p>
           <p className="mt-0.5">
-            Connection Status: <span className="text-emerald-400 font-bold uppercase">{syncMode === 'websocket' ? 'REALTIME ACTIVE' : syncMode === 'polling' ? 'LIVE POLLING' : syncMode === 'local' ? 'OFFLINE LOCAL' : 'STABLE'}</span>
+            Protocol: <span className="text-emerald-400 font-bold uppercase">{syncMode === 'websocket' ? 'REALTIME WEBSOCKET (WSS)' : syncMode === 'local' ? 'OFFLINE LOCAL' : 'CONNECTING...'}</span>
           </p>
         </div>
       </div>
